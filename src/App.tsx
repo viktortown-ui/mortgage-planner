@@ -41,7 +41,7 @@ function App() {
   return <div className="app"><header>Ипотечный планировщик</header><main>
     <MortgageInputForm input={input} onChange={safeSetInput} error={error} />
     <section className="results">{result ? <>
-      <ResultSummary result={result} />
+      <ResultSummary result={result} preferredMode={input.prepayments[0]?.mode} />
       <PaymentCalendar schedule={result.withPrepayments.schedule} />
       <DebtChart schedule={result.withPrepayments.schedule} />
       <InterestPrincipalChart schedule={result.withPrepayments.schedule} />
