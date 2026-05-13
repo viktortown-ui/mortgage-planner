@@ -16,13 +16,19 @@ const defaultInput: MortgageInput = {
   firstPaymentDate: '2026-06-01', paymentType: 'annuity', prepayments: [],
 };
 
+const withDerivedLoanAmount = (raw: MortgageInput): MortgageInput => ({
+  ...raw,
+  loanAmount: raw.propertyPrice - raw.downPayment,
+});
+
 function App() {
-  const [input, setInput] = useState<MortgageInput>(() => loadFromStorage(storageKey, defaultInput));
+  const [input, setInput] = useState<MortgageInput>(() => withDerivedLoanAmount(loadFromStorage(storageKey, defaultInput)));
   const [error, setError] = useState('');
 
   const safeSetInput = (next: MortgageInput) => {
-    setInput(next);
-    saveToStorage(storageKey, next);
+    const normalized = withDerivedLoanAmount(next);
+    setInput(normalized);
+    saveToStorage(storageKey, normalized);
   };
 
   const result = useMemo(() => {
@@ -41,11 +47,11 @@ function App() {
   return <div className="app"><header>Ипотечный планировщик</header><main>
     <MortgageInputForm input={input} onChange={safeSetInput} error={error} />
     <section className="results">{result ? <>
-      <ResultSummary result={result} preferredMode={input.prepayments[0]?.mode} />
+      <ResultSummary result={result} preferredMode={input.prepayments[0]?.mode} hasPrepayments={input.prepayments.some((p) => p.amount > 0)} baselineClosingDate={result.baseline.summary.closingDate} />
       <PaymentCalendar schedule={result.withPrepayments.schedule} />
       <DebtChart schedule={result.withPrepayments.schedule} />
       <InterestPrincipalChart schedule={result.withPrepayments.schedule} />
-      <PaymentTable schedule={result.withPrepayments.schedule} />
+      <PaymentTable schedule={result.withPrepayments.schedule} prepayments={input.prepayments} />
     </> : <div className="panel">Введите корректные данные для расчёта.</div>}</section>
   </main></div>;
 }

@@ -11,9 +11,9 @@ export function PaymentCalendar({ schedule }: { schedule: PaymentRow[] }) {
     return <div
       key={row.monthIndex}
       className={`calendar-item${hasPrepayment ? ' calendar-item-prepay' : ''}${isLastYear ? ' calendar-item-last' : ''}`}
-      title={`Платёж: ${Math.round(row.payment)} ₽\nПроценты: ${Math.round(row.interest)} ₽\nТело: ${Math.round(row.principal)} ₽\nОстаток: ${Math.round(row.remainingDebt)} ₽`}
+      title={`Платёж: ${Math.round(row.payment)} ₽\nПроценты: ${Math.round(row.interest)} ₽\nТело долга: ${Math.round(row.principal)} ₽\nОстаток долга: ${Math.round(row.remainingDebt)} ₽\nДосрочно: ${Math.round(row.prepayment)} ₽`}
     >
-      <strong>{formatDate(row.date)}</strong><span>{Math.round(row.payment + row.prepayment)} ₽</span>
+      <strong>{formatDate(row.date)}</strong><span>{Math.round(row.payment + row.prepayment)} ₽</span>{hasPrepayment && <em>Досрочно</em>}
     </div>;
   })}</div></div>;
 }
