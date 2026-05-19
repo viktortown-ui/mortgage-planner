@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CartesianGrid, Legend, Line, LineChart, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { PaymentRow } from '../../core/mortgage/types';
 import { formatMoney } from '../../shared/formatMoney';
 
@@ -7,14 +7,15 @@ export function DebtChart({ schedule }: { schedule: PaymentRow[] }) {
   const [view, setView] = useState<'month' | 'year'>('month');
 
   const data = useMemo(() => {
-    if (view === 'month') return schedule.map((r) => ({ label: r.monthIndex, remainingDebt: r.remainingDebt }));
-    const years = new Map<number, { year: number; remainingDebt: number; label: number }>();
+    if (view === 'month') return schedule.map((r) => ({ label: new Date(r.date).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' }), remainingDebt: r.remainingDebt, payment: r.payment, prepayment: r.prepayment }));
+    const years = new Map<number, { label: string; remainingDebt: number; payment: number; prepayment: number }>();
     schedule.forEach((row) => {
       const year = new Date(row.date).getFullYear();
-      years.set(year, { year, remainingDebt: row.remainingDebt, label: year });
+      const prev = years.get(year) ?? { label: String(year), remainingDebt: row.remainingDebt, payment: 0, prepayment: 0 };
+      years.set(year, { label: String(year), remainingDebt: row.remainingDebt, payment: prev.payment + row.payment, prepayment: prev.prepayment + row.prepayment });
     });
     return Array.from(years.values());
   }, [schedule, view]);
 
-  return <div className="chart"><div className="table-head"><h3>Остаток долга</h3><div><button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => setView('month')}>По месяцам</button><button type="button" className={view === 'year' ? 'active-switch' : ''} onClick={() => setView('year')}>По годам</button></div></div><ResponsiveContainer width="100%" height={260}><LineChart data={data}><XAxis dataKey="label" label={{ value: view === 'month' ? 'Месяц' : 'Год', position: 'insideBottom', offset: -5 }} /><YAxis /><Tooltip formatter={(value) => formatMoney(Number(value ?? 0))} labelFormatter={(label) => `${view === 'month' ? 'Месяц' : 'Год'}: ${label}`} /><Line type="monotone" name="Остаток долга" dataKey="remainingDebt" stroke="#2463eb" dot={false} /></LineChart></ResponsiveContainer></div>;
+  return <div className="chart"><div className="table-head"><h3>Остаток долга</h3><div><button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => setView('month')}>По месяцам</button><button type="button" className={view === 'year' ? 'active-switch' : ''} onClick={() => setView('year')}>По годам</button></div></div><ResponsiveContainer width="100%" height={280}><LineChart data={data}><CartesianGrid stroke="#dbeafe" strokeDasharray="4 4" /><XAxis dataKey="label" /><YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} /><Tooltip formatter={(value) => formatMoney(Number(value ?? 0))} /><Legend /><Line type="monotone" name="Остаток долга" dataKey="remainingDebt" stroke="#2563eb" strokeWidth={3} dot={false} />{view === 'month' ? data.map((row, i) => row.prepayment > 0 ? <ReferenceDot key={i} x={row.label} y={row.remainingDebt} r={4} fill="#8b5cf6" /> : null) : null}</LineChart></ResponsiveContainer></div>;
 }

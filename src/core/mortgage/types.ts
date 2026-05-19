@@ -1,7 +1,7 @@
 export type PaymentType = 'annuity' | 'differentiated';
 
 export type PrepaymentMode = 'reduceTerm' | 'reducePayment';
-export type ScenarioKind = 'baseline' | 'monthlyPrepayment' | 'semiAnnualPrepayment';
+export type ScenarioKind = 'baseline' | 'userPrepayments' | 'autoPrepayment';
 
 export interface Prepayment {
   date: string;
@@ -51,8 +51,6 @@ export interface ScenarioResult {
 export interface ComparisonResult {
   baseline: CalculationResult;
   withPrepayments: CalculationResult;
-  scenarios: ScenarioResult[];
   interestSavings: number;
   monthsSaved: number;
-  bestScenario: ScenarioResult;
 }

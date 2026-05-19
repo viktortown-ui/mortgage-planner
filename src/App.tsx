@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { compareScenarios } from './core/mortgage/compareScenarios';
 import type { MortgageInput } from './core/mortgage/types';
+import type { AutoScenarioSettings } from './core/mortgage/scenarioInsights';
 import { MortgageInputForm } from './features/calculator/MortgageInputForm';
 import { ResultSummary } from './features/calculator/ResultSummary';
 import { PaymentCalendar } from './features/calendar/PaymentCalendar';
@@ -11,18 +12,14 @@ import { loadFromStorage, saveToStorage } from './shared/storage';
 import './styles/global.css';
 
 const storageKey = 'mortgage-planner-v1';
-const defaultInput: MortgageInput = {
-  propertyPrice: 10000000, downPayment: 2000000, loanAmount: 8000000, annualRate: 12, termYears: 20,
-  firstPaymentDate: '2026-06-01', paymentType: 'annuity', prepayments: [],
-};
+const defaultInput: MortgageInput = { propertyPrice: 10000000, downPayment: 2000000, loanAmount: 8000000, annualRate: 12, termYears: 20, firstPaymentDate: '2026-06-01', paymentType: 'annuity', prepayments: [] };
+const defaultAuto: AutoScenarioSettings = { amount: 0, frequency: 'monthly', mode: 'reduceTerm' };
 
-const withDerivedLoanAmount = (raw: MortgageInput): MortgageInput => ({
-  ...raw,
-  loanAmount: raw.propertyPrice - raw.downPayment,
-});
+const withDerivedLoanAmount = (raw: MortgageInput): MortgageInput => ({ ...raw, loanAmount: raw.propertyPrice - raw.downPayment });
 
 function App() {
   const [input, setInput] = useState<MortgageInput>(() => withDerivedLoanAmount(loadFromStorage(storageKey, defaultInput)));
+  const [autoScenario, setAutoScenario] = useState<AutoScenarioSettings>(defaultAuto);
   const [error, setError] = useState('');
 
   const safeSetInput = (next: MortgageInput) => {
@@ -45,9 +42,9 @@ function App() {
   }, [input]);
 
   return <div className="app"><header>Ипотечный планировщик</header><main>
-    <MortgageInputForm input={input} onChange={safeSetInput} error={error} />
+    <aside><MortgageInputForm input={input} onChange={safeSetInput} error={error} /></aside>
     <section className="results">{result ? <>
-      <ResultSummary result={result} preferredMode={input.prepayments[0]?.mode} hasPrepayments={input.prepayments.some((p) => p.amount > 0)} baselineClosingDate={result.baseline.summary.closingDate} />
+      <ResultSummary result={result} input={input} autoScenario={autoScenario} setAutoScenario={setAutoScenario} />
       <PaymentCalendar schedule={result.withPrepayments.schedule} />
       <DebtChart schedule={result.withPrepayments.schedule} />
       <InterestPrincipalChart schedule={result.withPrepayments.schedule} />
