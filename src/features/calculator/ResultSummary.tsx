@@ -3,49 +3,22 @@ import type { AutoScenarioSettings } from '../../core/mortgage/scenarioInsights'
 import { buildAutoScenario, findBestPrepaymentMonth } from '../../core/mortgage/scenarioInsights';
 import { formatMoney } from '../../shared/formatMoney';
 
-function monthsToLabel(months: number): string {
-  return `${months} мес.`;
-}
-
 export function ResultSummary({ result, input, autoScenario, setAutoScenario }: { result: ComparisonResult; input: MortgageInput; autoScenario: AutoScenarioSettings; setAutoScenario: (next: AutoScenarioSettings) => void }) {
   const active = result.withPrepayments;
+  const firstYear = active.schedule.slice(0, 12);
+  const firstYearInterest = firstYear.reduce((acc, row) => acc + row.interest, 0);
+  const firstYearPrincipal = firstYear.reduce((acc, row) => acc + row.principal, 0);
+  const breakPoint = active.schedule.find((row) => row.principal > row.interest);
+  const bankShare = active.summary.totalPayment > 0 ? (active.summary.totalInterest / active.summary.totalPayment) * 100 : 0;
   const hasPrepayments = input.prepayments.some((p) => p.amount > 0);
   const bestPayment = findBestPrepaymentMonth(active.schedule);
   const autoResult = buildAutoScenario(input, autoScenario);
 
-  const scenarioCards = [
-    { key: 'baseline', title: 'Без досрочек', data: result.baseline },
-    ...(hasPrepayments ? [{ key: 'my', title: 'Мои досрочки', data: active }] : []),
-  ];
-
   const renderInsight = (mode: PrepaymentMode | undefined) => mode === 'reducePayment' ? 'фокус на снижении ежемесячной нагрузки' : 'фокус на сокращении срока кредита';
-
   return <>
-    <div className="panel">
-      <h3>Итог по ипотеке</h3>
-      <p className="hint">{hasPrepayments ? 'Досрочные платежи уже сокращают переплату. Ниже видно, где именно меняется график.' : 'Пока это базовый график. Добавьте досрочный платёж, чтобы увидеть, сколько можно сэкономить.'}</p>
-      <div className="cards kpi-grid">
-        <div className="card"><h4>Сумма кредита</h4><p>{formatMoney(input.loanAmount)}</p></div>
-        <div className="card"><h4>Ежемесячный платёж</h4><p>{formatMoney(active.monthlyPayment ?? active.schedule[0]?.payment ?? 0)}</p></div>
-        <div className="card"><h4>Переплата банку</h4><p>{formatMoney(active.summary.totalInterest)}</p><small>Сколько уйдёт банку сверх суммы кредита</small></div>
-        <div className="card"><h4>Полная стоимость</h4><p>{formatMoney(active.summary.totalPayment)}</p><small>Сумма кредита + проценты</small></div>
-        <div className="card"><h4>Дата закрытия</h4><p>{active.summary.closingDate}</p><small>Когда кредит будет закрыт по текущему плану</small></div>
-      </div>
-    </div>
-
-    <div className="panel effect-panel"><h3>Эффект досрочек</h3>
-      {!hasPrepayments ? <p>Досрочные платежи не добавлены. Добавьте дату и сумму, чтобы увидеть экономию.</p> : <ul><li>Экономия на процентах: <strong>{formatMoney(result.interestSavings)}</strong></li><li>Срок сокращён на <strong>{monthsToLabel(result.monthsSaved)}</strong></li><li>Было закрытие: <strong>{result.baseline.summary.closingDate}</strong></li><li>Стало закрытие: <strong>{active.summary.closingDate}</strong></li><li>Самый полезный платёж: <strong>{bestPayment ? `${bestPayment.date} · ${formatMoney(bestPayment.prepayment)}` : '—'}</strong></li></ul>}
-    </div>
-
-    <div className="panel"><h3>Сравнение вариантов досрочного погашения</h3>
-      <div className="quick-settings"><h4>Быстрая проверка сценариев</h4>
-        <label><span>Дополнительная сумма</span><input type="number" value={autoScenario.amount} onChange={(e) => setAutoScenario({ ...autoScenario, amount: Number(e.target.value) })} /></label>
-        <label><span>Частота</span><select value={autoScenario.frequency} onChange={(e) => setAutoScenario({ ...autoScenario, frequency: e.target.value as AutoScenarioSettings['frequency'] })}><option value="monthly">каждый месяц</option><option value="semiAnnual">раз в 6 месяцев</option><option value="annual">раз в год</option></select></label>
-        <label><span>Режим</span><select value={autoScenario.mode} onChange={(e) => setAutoScenario({ ...autoScenario, mode: e.target.value as PrepaymentMode })}><option value="reduceTerm">уменьшать срок</option><option value="reducePayment">уменьшать платёж</option></select></label>
-      </div>
-      <div className="scenario-grid">{scenarioCards.map((item) => <div className="scenario-card" key={item.key}><strong>{item.title}</strong><span>Переплата: {formatMoney(item.data.summary.totalInterest)}</span><span>Срок: {item.data.schedule.length} мес.</span><span>Дата закрытия: {item.data.summary.closingDate}</span><span>Экономия: {formatMoney(result.baseline.summary.totalInterest - item.data.summary.totalInterest)}</span><span>Сокращение срока: {result.baseline.schedule.length - item.data.schedule.length} мес.</span><em>{item.key === 'baseline' ? 'База для честного сравнения.' : `Ваш план: ${renderInsight(input.prepayments[0]?.mode)}.`}</em></div>)}
-        <div className="scenario-card"><strong>Автосценарий</strong>{!autoResult ? <p>Введите сумму, чтобы сравнить регулярную досрочку.</p> : <><span>Переплата: {formatMoney(autoResult.summary.totalInterest)}</span><span>Срок: {autoResult.schedule.length} мес.</span><span>Дата закрытия: {autoResult.summary.closingDate}</span><span>Экономия: {formatMoney(result.baseline.summary.totalInterest - autoResult.summary.totalInterest)}</span><span>Сокращение срока: {result.baseline.schedule.length - autoResult.schedule.length} мес.</span><em>Автоматическая стратегия: {renderInsight(autoScenario.mode)}.</em></>}</div>
-      </div>
-    </div>
+    <div className="panel"><h3>Итог по ипотеке</h3><div className="cards kpi-grid"><div className="card"><h4>Сумма кредита</h4><p>{formatMoney(input.loanAmount)}</p></div><div className="card"><h4>Ежемесячный платёж</h4><p>{formatMoney(active.monthlyPayment ?? active.schedule[0]?.payment ?? 0)}</p></div><div className="card interest"><h4>Переплата банку</h4><p>{formatMoney(active.summary.totalInterest)}</p></div><div className="card"><h4>Полная стоимость</h4><p>{formatMoney(active.summary.totalPayment)}</p></div><div className="card"><h4>Дата закрытия</h4><p>{active.summary.closingDate}</p></div></div></div>
+    <div className="panel effect-panel"><h3>Эффект досрочек</h3>{hasPrepayments ? <ul><li>Экономия на процентах: <strong>{formatMoney(result.interestSavings)}</strong></li><li>Срок сокращён: <strong>{result.monthsSaved} мес.</strong></li><li>Самый полезный платёж: <strong>{bestPayment ? `${bestPayment.date} · ${formatMoney(bestPayment.prepayment)}` : '—'}</strong></li></ul> : <p>Добавьте досрочные, чтобы увидеть экономию.</p>}</div>
+    <div className="panel"><h3>Что банк забирает на самом деле</h3><div className="insights-grid"><div className="insight-card interest"><h4>Переплата банку</h4><p>{formatMoney(active.summary.totalInterest)}</p><small>Это деньги сверх суммы кредита.</small></div><div className="insight-card interest"><h4>Первые годы самые дорогие</h4><p>{formatMoney(firstYearInterest)}</p><small>Тело за 12 мес: {formatMoney(firstYearPrincipal)}</small></div><div className="insight-card"><h4>Точка перелома</h4><p>{breakPoint?.date ?? 'Не найдена'}</p><small>{breakPoint ? 'С этого месяца тело долга больше процентов.' : 'На текущем сроке точка перелома не найдена.'}</small></div><div className="insight-card"><h4>Доля банка</h4><p>{bankShare.toFixed(1)}%</p><small>Из 1 000 ₽ банку: {Math.round((bankShare / 100) * 1000)} ₽</small></div></div><div className="cost-bar"><span style={{ width: `${Math.max(5, (input.loanAmount / active.summary.totalPayment) * 100)}%` }}>Кредит</span><span className="interest" style={{ width: `${Math.max(5, (active.summary.totalInterest / active.summary.totalPayment) * 100)}%` }}>Проценты</span></div></div>
+    <div className="panel"><h3>Сравнение вариантов досрочного погашения</h3><div className="quick-settings"><label><span>Доп. сумма</span><input type="number" value={autoScenario.amount} onChange={(e) => setAutoScenario({ ...autoScenario, amount: Number(e.target.value) })} /></label><label><span>Частота</span><select value={autoScenario.frequency} onChange={(e) => setAutoScenario({ ...autoScenario, frequency: e.target.value as AutoScenarioSettings['frequency'] })}><option value="monthly">каждый месяц</option><option value="semiAnnual">раз в 6 месяцев</option><option value="annual">раз в год</option></select></label><label><span>Режим</span><select value={autoScenario.mode} onChange={(e) => setAutoScenario({ ...autoScenario, mode: e.target.value as PrepaymentMode })}><option value="reduceTerm">уменьшать срок</option><option value="reducePayment">уменьшать платёж</option></select></label></div><div className="scenario-grid"><div className="scenario-card"><strong>Без досрочек</strong><span>Переплата: {formatMoney(result.baseline.summary.totalInterest)}</span></div><div className="scenario-card"><strong>Текущий план</strong><span>Переплата: {formatMoney(active.summary.totalInterest)}</span><em>{renderInsight(input.prepayments[0]?.mode)}</em></div><div className="scenario-card"><strong>Автосценарий</strong>{autoResult ? <span>Переплата: {formatMoney(autoResult.summary.totalInterest)}</span> : <span>Введите сумму для расчёта.</span>}</div></div></div>
   </>;
 }
