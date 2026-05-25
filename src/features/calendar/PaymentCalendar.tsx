@@ -22,5 +22,5 @@ export function PaymentCalendar({ schedule, prepayments }: { schedule: PaymentRo
     const row = byDay.get(day); const hasPrepay = prepayDays.has(day);
     return <button key={idx} type="button" className="day" onClick={() => setSelected(row ?? null)}><span>{day}</span><div className="dots">{row ? <i className="dot pay" /> : null}{hasPrepay ? <i className="dot prepay" /> : null}</div></button>;
   })}</div>
-  {selected && <div className="popover"><strong>{selected.date}</strong><span>Платёж: {formatMoney(selected.payment)}</span><span>Проценты: {formatMoney(selected.interest)}</span><span>Тело долга: {formatMoney(selected.principal)}</span><span>Досрочно: {formatMoney(selected.prepayment)}</span><span>Остаток: {formatMoney(selected.remainingDebt)}</span></div>}</div>;
+  {selected && <div className="popover"><strong>{selected.date}</strong><span>Платёж: {formatMoney(selected.payment)}</span><span>Проценты: {formatMoney(selected.interest)}</span><span>Тело долга: {formatMoney(selected.principal)}</span><span>Досрочно: {formatMoney(selected.prepayment)}</span>{selected.prepaymentEvents?.map((event) => <span key={`${event.date}-${event.amount}`}>Досрочно {formatMoney(event.amount)} от {new Date(event.date).toLocaleDateString('ru-RU')}</span>)}<span>Остаток: {formatMoney(selected.remainingDebt)}</span></div>}</div>;
 }

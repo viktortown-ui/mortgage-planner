@@ -9,6 +9,12 @@ export interface Prepayment {
   mode: PrepaymentMode;
 }
 
+export interface PrepaymentEvent {
+  date: string;
+  amount: number;
+  mode: PrepaymentMode;
+}
+
 export interface MortgageInput {
   propertyPrice: number;
   downPayment: number;
@@ -27,6 +33,7 @@ export interface PaymentRow {
   interest: number;
   principal: number;
   prepayment: number;
+  prepaymentEvents?: PrepaymentEvent[];
   remainingDebt: number;
 }
 

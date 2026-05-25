@@ -1,4 +1,4 @@
-import type { Prepayment } from './types';
+import type { Prepayment, PrepaymentEvent } from './types';
 
 export interface DebtAdjustment {
   remainingDebt: number;
@@ -7,26 +7,30 @@ export interface DebtAdjustment {
 }
 
 export function applyPrepayments(
-  prepaymentsByDate: Map<string, Prepayment[]>,
-  date: string,
+  prepaymentsByMonth: Map<string, Prepayment[]>,
+  monthKey: string,
   remainingDebt: number,
   monthlyPayment: number,
   monthlyRate: number,
   termMonthsLeft: number,
-): { prepaymentAmount: number; adjustment: DebtAdjustment } {
-  const items = prepaymentsByDate.get(date) ?? [];
+): { prepaymentAmount: number; events: PrepaymentEvent[]; adjustment: DebtAdjustment } {
+  const items = prepaymentsByMonth.get(monthKey) ?? [];
   let debt = remainingDebt;
   let payment = monthlyPayment;
   let term = termMonthsLeft;
   let prepaymentAmount = 0;
+  const events: PrepaymentEvent[] = [];
 
   items.forEach((item) => {
     if (debt <= 0) return;
 
     const rawAmount = Number(item.amount);
     const amount = Number.isFinite(rawAmount) ? Math.max(0, Math.min(rawAmount, debt)) : 0;
+    if (amount <= 0) return;
+
     debt = Number((debt - amount).toFixed(2));
     prepaymentAmount += amount;
+    events.push({ date: item.date, amount, mode: item.mode });
 
     if (item.mode === 'reducePayment' && term > 0 && monthlyRate > 0) {
       const factor = Math.pow(1 + monthlyRate, term);
@@ -48,6 +52,7 @@ export function applyPrepayments(
 
   return {
     prepaymentAmount: Number(prepaymentAmount.toFixed(2)),
+    events,
     adjustment: { remainingDebt: Math.max(0, debt), monthlyPayment: payment, termMonthsLeft: term },
   };
 }
