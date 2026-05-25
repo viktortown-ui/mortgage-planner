@@ -17,7 +17,7 @@ export function PaymentCalendar({ schedule, prepayments }: { schedule: PaymentRo
   const days = new Date(year, month + 1, 0).getDate();
   const cells = useMemo(() => Array.from({ length: 42 }, (_, i) => i - firstWeekDay + 1), [firstWeekDay]);
 
-  return <div className="calendar panel"><div className="calendar-head"><h3>Календарь</h3><div><button type="button" onClick={() => setMonthShift((v) => v - 1)}>←</button><strong>{base.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</strong><button type="button" onClick={() => setMonthShift((v) => v + 1)}>→</button></div></div><div className="calendar-week">{weekDays.map((d) => <span key={d}>{d}</span>)}</div><div className="calendar-month">{cells.map((day, idx) => {
+  return <div className="calendar panel"><div className="calendar-head"><h3>Календарь</h3><div className="calendar-nav"><button type="button" onClick={() => setMonthShift((v) => v - 1)}>←</button><strong className="month-title">{base.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}</strong><button type="button" onClick={() => setMonthShift((v) => v + 1)}>→</button></div></div><div className="calendar-week">{weekDays.map((d) => <span key={d}>{d}</span>)}</div><div className="calendar-month">{cells.map((day, idx) => {
     if (day < 1 || day > days) return <button key={idx} type="button" className="day muted" />;
     const row = byDay.get(day); const hasPrepay = prepayDays.has(day);
     return <button key={idx} type="button" className="day" onClick={() => setSelected(row ?? null)}><span>{day}</span><div className="dots">{row ? <i className="dot pay" /> : null}{hasPrepay ? <i className="dot prepay" /> : null}</div></button>;
