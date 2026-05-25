@@ -12,13 +12,18 @@ function addMonths(isoDate: string, months: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function monthKey(isoDate: string): string {
+  return isoDate.slice(0, 7);
+}
+
 function groupPrepayments(prepayments: Prepayment[]): Map<string, Prepayment[]> {
   const map = new Map<string, Prepayment[]>();
   prepayments.forEach((p) => {
-    if (!Number.isFinite(p.amount) || p.amount < 0) return;
-    const list = map.get(p.date) ?? [];
+    if (!Number.isFinite(p.amount) || p.amount <= 0) return;
+    const key = monthKey(p.date);
+    const list = map.get(key) ?? [];
     list.push(p);
-    map.set(p.date, list);
+    map.set(key, list);
   });
   return map;
 }
@@ -55,14 +60,16 @@ export function buildSchedule(input: MortgageInput, includePrepayments: boolean)
 
     remainingDebt = Number((remainingDebt - principal).toFixed(2));
 
-    const { prepaymentAmount, adjustment } = applyPrepayments(prepaymentMap, date, remainingDebt, monthlyPayment, monthlyRate, termLeft);
+    // v1 rule: inside each month we first apply the regular payment,
+    // then apply all prepayments from the same YYYY-MM month bucket.
+    const { prepaymentAmount, events, adjustment } = applyPrepayments(prepaymentMap, monthKey(date), remainingDebt, monthlyPayment, monthlyRate, termLeft);
     remainingDebt = adjustment.remainingDebt;
     if (input.paymentType === 'annuity') {
       monthlyPayment = adjustment.monthlyPayment;
       termLeft = adjustment.termMonthsLeft;
     }
 
-    schedule.push({ monthIndex: month + 1, date, payment, interest, principal, prepayment: prepaymentAmount, remainingDebt: Math.max(0, remainingDebt) });
+    schedule.push({ monthIndex: month + 1, date, payment, interest, principal, prepayment: prepaymentAmount, prepaymentEvents: events, remainingDebt: Math.max(0, remainingDebt) });
 
     month += 1;
     termLeft -= 1;
