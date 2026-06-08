@@ -1,7 +1,9 @@
 import { calculateAnnuity } from './calculateAnnuity';
 import { calculateDifferentiated } from './calculateDifferentiated';
 import { applyPrepayments } from './applyPrepayments';
-import type { CalculationResult, MortgageInput, PaymentRow, Prepayment } from './types';
+import { expandInsuranceSchedule } from './insuranceSchedule';
+import { expandPrepaymentRules } from './prepaymentRules';
+import type { CalculationResult, InsuranceEvent, MortgageInput, PaymentRow, PrepaymentEvent } from './types';
 
 function addMonths(isoDate: string, months: number): string {
   const date = new Date(isoDate);
@@ -16,8 +18,8 @@ function monthKey(isoDate: string): string {
   return isoDate.slice(0, 7);
 }
 
-function groupPrepayments(prepayments: Prepayment[]): Map<string, Prepayment[]> {
-  const map = new Map<string, Prepayment[]>();
+function groupPrepayments(prepayments: PrepaymentEvent[]): Map<string, PrepaymentEvent[]> {
+  const map = new Map<string, PrepaymentEvent[]>();
   prepayments.forEach((p) => {
     if (!Number.isFinite(p.amount) || p.amount <= 0) return;
     const key = monthKey(p.date);
@@ -37,7 +39,8 @@ export function buildSchedule(input: MortgageInput, includePrepayments: boolean)
     return null;
   }
 
-  const prepaymentMap = groupPrepayments(includePrepayments ? input.prepayments : []);
+  const expandedPrepayments = includePrepayments ? expandPrepaymentRules(input.prepayments, input) : [];
+  const prepaymentMap = groupPrepayments(expandedPrepayments);
   let remainingDebt = input.loanAmount;
   let termLeft = termMonths;
   let month = 0;
@@ -69,7 +72,7 @@ export function buildSchedule(input: MortgageInput, includePrepayments: boolean)
       termLeft = adjustment.termMonthsLeft;
     }
 
-    schedule.push({ monthIndex: month + 1, date, payment, interest, principal, prepayment: prepaymentAmount, prepaymentEvents: events, remainingDebt: Math.max(0, remainingDebt) });
+    schedule.push({ monthIndex: month + 1, date, payment, interest, principal, prepayment: prepaymentAmount, prepaymentEvents: events, insuranceCost: 0, insuranceEvents: [], realPaid: Number((payment + prepaymentAmount).toFixed(2)), remainingDebt: Math.max(0, remainingDebt) });
 
     month += 1;
     termLeft -= 1;
@@ -82,10 +85,26 @@ export function buildSchedule(input: MortgageInput, includePrepayments: boolean)
 
   const totalInterest = Number(schedule.reduce((sum, row) => sum + row.interest, 0).toFixed(2));
   const totalPayment = Number(schedule.reduce((sum, row) => sum + row.payment + row.prepayment, 0).toFixed(2));
+  const closingDate = schedule.at(-1)?.date ?? input.firstPaymentDate;
+  const insuranceEvents = expandInsuranceSchedule(input.insuranceRules ?? [], closingDate);
+  const insuranceByMonth = new Map<string, InsuranceEvent[]>();
+  insuranceEvents.forEach((event) => {
+    const key = monthKey(event.date);
+    insuranceByMonth.set(key, [...(insuranceByMonth.get(key) ?? []), event]);
+  });
+  schedule.forEach((row) => {
+    const rowEvents = insuranceByMonth.get(monthKey(row.date)) ?? [];
+    row.insuranceEvents = rowEvents;
+    row.insuranceCost = Number(rowEvents.reduce((sum, event) => sum + event.amount, 0).toFixed(2));
+    row.realPaid = Number((row.payment + row.prepayment + row.insuranceCost).toFixed(2));
+  });
+  const totalInsuranceCost = Number(insuranceEvents.reduce((sum, event) => sum + event.amount, 0).toFixed(2));
+  const totalRealCost = Number((totalPayment + totalInsuranceCost).toFixed(2));
+  const realCostMultiplier = input.propertyPrice > 0 ? Number((totalRealCost / input.propertyPrice).toFixed(4)) : 0;
 
   return {
     schedule,
-    summary: { totalInterest, totalPayment, closingDate: schedule.at(-1)?.date ?? input.firstPaymentDate },
+    summary: { totalInterest, totalPayment, closingDate, totalInsuranceCost, totalRealCost, realCostMultiplier, insuranceEvents },
     monthlyPayment: input.paymentType === 'annuity' ? calculateAnnuity(input.loanAmount, input.annualRate, termMonths) : undefined,
   };
 }

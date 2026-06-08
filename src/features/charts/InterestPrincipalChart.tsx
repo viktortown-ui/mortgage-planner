@@ -34,6 +34,7 @@ type InterestPrincipalPoint = {
   regularPayment: number;
   remainingDebt: number;
   totalPayment: number;
+  insurance: number;
 };
 
 const MONTH_POINT_WIDTH = 18;
@@ -46,6 +47,7 @@ const chartColors = {
   interest: '#f97316',
   principal: '#16a34a',
   prepayment: '#8b5cf6',
+  insurance: '#eab308',
 } as const;
 
 function formatAxisMoney(value: number) {
@@ -73,7 +75,8 @@ function buildMonthlyData(schedule: PaymentRow[]): InterestPrincipalPoint[] {
       principal: row.principal,
       regularPayment,
       remainingDebt: row.remainingDebt,
-      totalPayment: regularPayment + row.prepayment,
+      totalPayment: regularPayment + row.prepayment + row.insuranceCost,
+      insurance: row.insuranceCost,
     };
   });
 }
@@ -92,8 +95,9 @@ function buildYearlyData(schedule: PaymentRow[]): InterestPrincipalPoint[] {
       existing.prepayment += row.prepayment;
       existing.regularPayment += regularPayment;
       existing.remainingDebt = row.remainingDebt;
-      existing.totalPayment += regularPayment + row.prepayment;
+      existing.totalPayment += regularPayment + row.prepayment + row.insuranceCost;
       existing.prepaymentEvent += row.prepayment;
+      existing.insurance += row.insuranceCost;
       existing.events = [...(existing.events ?? []), ...(row.prepaymentEvents ?? [])];
       return;
     }
@@ -108,7 +112,8 @@ function buildYearlyData(schedule: PaymentRow[]): InterestPrincipalPoint[] {
       principal: row.principal,
       regularPayment,
       remainingDebt: row.remainingDebt,
-      totalPayment: regularPayment + row.prepayment,
+      totalPayment: regularPayment + row.prepayment + row.insuranceCost,
+      insurance: row.insuranceCost,
     });
   });
 
@@ -142,7 +147,8 @@ function ChartTooltip({ active, label, payload }: TooltipContentProps<TooltipVal
     { color: chartColors.interest, label: 'Проценты', value: row.interest },
     { color: chartColors.principal, label: 'Тело долга', value: row.principal },
     { color: chartColors.prepayment, label: 'Досрочно', value: row.prepayment + row.prepaymentEvent },
-    { color: 'var(--chart-tooltip-title)', label: 'Общий платёж', value: row.totalPayment },
+    { color: chartColors.insurance, label: 'Страховки', value: row.insurance },
+    { color: 'var(--chart-tooltip-title)', label: 'Всего за период', value: row.totalPayment },
     { color: 'var(--chart-axis-text)', label: 'Остаток долга', value: row.remainingDebt },
   ];
 
@@ -184,7 +190,7 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
   return (
     <div className="chart">
       <div className="table-head">
-        <h3>Проценты и тело долга</h3>
+        <h3>Реальная стоимость по времени</h3>
         <div>
           <button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => setView('month')}>
             По месяцам
@@ -195,8 +201,7 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
         </div>
       </div>
       <p className="muted-note">
-        Крупные досрочные платежи показаны маркерами, чтобы не ломать масштаб обычных платежей. В длинном сроке
-        график прокручивается по горизонтали, а подписи месяцев прореживаются.
+        Stacked bar показывает обычный платёж, досрочно и страховки. Страховки не уменьшают долг и не искажают график остатка долга.
       </p>
       <div
         className="chart-scroll"
@@ -250,6 +255,14 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
                 radius={[4, 4, 0, 0]}
                 maxBarSize={18}
               />
+              <Bar
+                stackId="pay"
+                name="Страховки"
+                dataKey="insurance"
+                fill={chartColors.insurance}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={18}
+              />
               {data.map((row) => row.prepaymentEvent > 0 ? (
                 <ReferenceDot
                   key={row.label}
@@ -277,6 +290,10 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
         <span className="chart-fixed-legend__item">
           <span className="chart-fixed-legend__marker" style={{ background: chartColors.principal }} />
           Тело долга
+        </span>
+        <span className="chart-fixed-legend__item">
+          <span className="chart-fixed-legend__marker" style={{ background: chartColors.insurance }} />
+          Страховки
         </span>
       </div>
     </div>
