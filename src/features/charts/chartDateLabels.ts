@@ -25,11 +25,13 @@ export function formatFullMonth(date: string): string {
   return new Date(date).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 }
 
+export function formatExactDate(date: string): string {
+  return new Date(date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 export function getMonthTickStep(pointsCount: number): number {
-  if (pointsCount <= 24) return 1;
-  if (pointsCount <= 60) return 2;
-  if (pointsCount <= 120) return 3;
-  if (pointsCount <= 240) return 6;
+  if (pointsCount <= 36) return 3;
+  if (pointsCount <= 120) return 6;
   return 12;
 }
 
