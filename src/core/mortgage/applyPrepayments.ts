@@ -1,4 +1,4 @@
-import type { Prepayment, PrepaymentEvent } from './types';
+import type { PrepaymentEvent } from './types';
 
 export interface DebtAdjustment {
   remainingDebt: number;
@@ -7,7 +7,7 @@ export interface DebtAdjustment {
 }
 
 export function applyPrepayments(
-  prepaymentsByMonth: Map<string, Prepayment[]>,
+  prepaymentsByMonth: Map<string, PrepaymentEvent[]>,
   monthKey: string,
   remainingDebt: number,
   monthlyPayment: number,
