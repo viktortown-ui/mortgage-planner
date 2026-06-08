@@ -3,7 +3,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ReferenceDot,
   ResponsiveContainer,
   Tooltip,
@@ -14,7 +13,7 @@ import type { TooltipContentProps, TooltipValueType } from 'recharts';
 import type { PaymentRow } from '../../core/mortgage/types';
 import { formatMoney } from '../../shared/formatMoney';
 import {
-  formatFullMonth,
+  formatExactDate,
   formatShortMonthYear,
   getMonthTickStep,
   shouldShowMonthTick,
@@ -37,9 +36,11 @@ type InterestPrincipalPoint = {
   totalPayment: number;
 };
 
-const MONTH_POINT_WIDTH = 14;
+const MONTH_POINT_WIDTH = 18;
 const YEAR_POINT_WIDTH = 46;
 const MIN_CHART_WIDTH = 760;
+const MONTH_X_AXIS_HEIGHT = 86;
+const YEAR_X_AXIS_HEIGHT = 42;
 
 const chartColors = {
   interest: '#f97316',
@@ -117,7 +118,7 @@ function buildYearlyData(schedule: PaymentRow[]): InterestPrincipalPoint[] {
 function formatTooltipLabel(row: InterestPrincipalPoint | undefined, fallbackLabel: string | number, view: ChartView) {
   if (!row) return String(fallbackLabel);
 
-  const date = row.date ? formatFullMonth(row.date) : undefined;
+  const date = row.date ? formatExactDate(row.date) : undefined;
   const eventDetails = row.events?.length
     ? row.events
         .map((event) => `${new Date(event.date).toLocaleDateString('ru-RU')} ${formatMoney(event.amount)}`)
@@ -204,15 +205,16 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
         tabIndex={0}
       >
         <div style={{ minWidth: minChartWidth }}>
-          <ResponsiveContainer width="100%" height={340}>
-            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 18, right: 18, bottom: view === 'month' ? 72 : 24, left: 4 }}>
+          <ResponsiveContainer width="100%" height={370}>
+            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 20, right: 24, bottom: view === 'month' ? 88 : 38, left: 12 }}>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeOpacity={1} strokeDasharray="3 6" />
               <XAxis
                 axisLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 dataKey="label"
+                height={view === 'month' ? MONTH_X_AXIS_HEIGHT : YEAR_X_AXIS_HEIGHT}
                 interval={0}
-                minTickGap={18}
-                tick={<RotatedMonthTick visibleLabels={visibleTickLabels} />}
+                minTickGap={24}
+                tick={<RotatedMonthTick angle={view === 'month' ? -60 : 0} dy={view === 'month' ? 22 : 18} visibleLabels={visibleTickLabels} />}
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
               />
               <YAxis
@@ -224,10 +226,6 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
                 width={54}
               />
               <Tooltip content={(props) => ChartTooltip(props, view)} cursor={{ fill: 'var(--chart-cursor)' }} />
-              <Legend
-                iconType="square"
-                wrapperStyle={{ color: 'var(--chart-axis-text)', fontSize: 14, fontWeight: 700, paddingTop: 10 }}
-              />
               <Bar
                 stackId="pay"
                 name="Проценты"
@@ -266,6 +264,20 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+      <div className="chart-fixed-legend" aria-label="Цвета графика">
+        <span className="chart-fixed-legend__item">
+          <span className="chart-fixed-legend__marker" style={{ background: chartColors.prepayment }} />
+          Досрочно
+        </span>
+        <span className="chart-fixed-legend__item">
+          <span className="chart-fixed-legend__marker" style={{ background: chartColors.interest }} />
+          Проценты
+        </span>
+        <span className="chart-fixed-legend__item">
+          <span className="chart-fixed-legend__marker" style={{ background: chartColors.principal }} />
+          Тело долга
+        </span>
       </div>
     </div>
   );
