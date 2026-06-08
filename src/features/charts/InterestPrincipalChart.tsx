@@ -13,6 +13,13 @@ import {
 import type { TooltipContentProps, TooltipValueType } from 'recharts';
 import type { PaymentRow } from '../../core/mortgage/types';
 import { formatMoney } from '../../shared/formatMoney';
+import {
+  formatFullMonth,
+  formatShortMonthYear,
+  getMonthTickStep,
+  shouldShowMonthTick,
+} from './chartDateLabels';
+import { RotatedMonthTick } from './RotatedMonthTick';
 
 type ChartView = 'month' | 'year';
 
@@ -47,18 +54,6 @@ function formatAxisMoney(value: number) {
   if (absoluteValue >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}m`;
   if (absoluteValue >= 1_000) return `${Math.round(value / 1_000)}k`;
   return String(Math.round(value));
-}
-
-function getMonthTickStep(monthsCount: number) {
-  if (monthsCount <= 48) return 1;
-  if (monthsCount <= 96) return 6;
-  if (monthsCount <= 180) return 12;
-  if (monthsCount <= 300) return 24;
-  return 36;
-}
-
-function formatMonthLabel(date: string) {
-  return new Date(date).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' });
 }
 
 function buildMonthlyData(schedule: PaymentRow[]): InterestPrincipalPoint[] {
@@ -122,7 +117,7 @@ function buildYearlyData(schedule: PaymentRow[]): InterestPrincipalPoint[] {
 function formatTooltipLabel(row: InterestPrincipalPoint | undefined, fallbackLabel: string | number, view: ChartView) {
   if (!row) return String(fallbackLabel);
 
-  const date = row.date ? formatMonthLabel(row.date) : undefined;
+  const date = row.date ? formatFullMonth(row.date) : undefined;
   const eventDetails = row.events?.length
     ? row.events
         .map((event) => `${new Date(event.date).toLocaleDateString('ru-RU')} ${formatMoney(event.amount)}`)
@@ -173,7 +168,16 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
     () => view === 'month' ? buildMonthlyData(schedule) : buildYearlyData(schedule),
     [schedule, view],
   );
-  const monthTickStep = useMemo(() => getMonthTickStep(schedule.length), [schedule.length]);
+  const monthTickStep = useMemo(() => getMonthTickStep(data.length), [data.length]);
+  const visibleTickLabels = useMemo(() => new Map<string | number, string>(
+    data.flatMap((row) => {
+      if (view === 'year') return [[row.label, String(row.label)] as const];
+      if (!row.date || !row.monthIndex) return [];
+      const shouldShow = shouldShowMonthTick(row.monthIndex, data.length, monthTickStep);
+
+      return shouldShow ? [[row.label, formatShortMonthYear(row.date)] as const] : [];
+    }),
+  ), [data, monthTickStep, view]);
   const minChartWidth = Math.max(MIN_CHART_WIDTH, data.length * (view === 'month' ? MONTH_POINT_WIDTH : YEAR_POINT_WIDTH));
 
   return (
@@ -201,27 +205,15 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
       >
         <div style={{ minWidth: minChartWidth }}>
           <ResponsiveContainer width="100%" height={340}>
-            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 18, right: 18, bottom: 10, left: 4 }}>
+            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 18, right: 18, bottom: view === 'month' ? 72 : 24, left: 4 }}>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeOpacity={1} strokeDasharray="3 6" />
               <XAxis
                 axisLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 dataKey="label"
                 interval={0}
                 minTickGap={18}
-                tick={{ fill: 'var(--chart-axis-text)', fontSize: 12 }}
+                tick={<RotatedMonthTick visibleLabels={visibleTickLabels} />}
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
-                tickFormatter={(value) => {
-                  if (view === 'year') return String(value);
-
-                  const row = data.find((point) => String(point.label) === String(value));
-                  if (!row?.monthIndex || !row.date) return '';
-
-                  const shouldShowTick = row.monthIndex === 1
-                    || row.monthIndex === schedule.length
-                    || row.monthIndex % monthTickStep === 0;
-
-                  return shouldShowTick ? formatMonthLabel(row.date) : '';
-                }}
               />
               <YAxis
                 axisLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}

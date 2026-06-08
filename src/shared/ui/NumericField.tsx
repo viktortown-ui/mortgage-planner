@@ -22,6 +22,7 @@ export function NumericField({ value, onValueChange, decimals = 0, onBlur, ...pr
   const [text, setText] = useState<string>(format(value, decimals));
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- keep editable text synchronized with external recalculations.
     setText(format(value, decimals));
   }, [value, decimals]);
 
