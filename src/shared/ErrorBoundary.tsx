@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { resetAppData } from './resetAppData';
 
 interface ErrorBoundaryState {
@@ -12,7 +12,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
     return { hasError: true };
   }
 
-  public componentDidCatch(_error: Error, _errorInfo: ErrorInfo): void {
+  public componentDidCatch(): void {
     // runtime safety fallback
   }
 
