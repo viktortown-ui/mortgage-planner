@@ -12,16 +12,13 @@ export function PaymentCalendar({ schedule, prepayments, insuranceEvents }: { sc
   const year = base.getFullYear(); const month = base.getMonth();
   const monthRows = schedule.filter((row) => { const d = new Date(row.date); return d.getFullYear() === year && d.getMonth() === month; });
   const prepayDays = new Set(prepayments.filter((p) => p.amount > 0).map((p) => new Date(p.date)).filter((d) => d.getFullYear() === year && d.getMonth() === month).map((d) => d.getDate()));
-  const insuranceDays = useMemo(() => {
-    const map = new Map<number, InsuranceEvent[]>();
-    insuranceEvents.forEach((event) => {
-      const d = new Date(event.date);
-      if (d.getFullYear() !== year || d.getMonth() !== month) return;
-      const day = d.getDate();
-      map.set(day, [...(map.get(day) ?? []), event]);
-    });
-    return map;
-  }, [insuranceEvents, month, year]);
+  const insuranceDays = new Map<number, InsuranceEvent[]>();
+  insuranceEvents.forEach((event) => {
+    const d = new Date(event.date);
+    if (d.getFullYear() !== year || d.getMonth() !== month) return;
+    const day = d.getDate();
+    insuranceDays.set(day, [...(insuranceDays.get(day) ?? []), event]);
+  });
   const byDay = new Map(monthRows.map((row) => [new Date(row.date).getDate(), row]));
   const firstWeekDay = (new Date(year, month, 1).getDay() + 6) % 7;
   const days = new Date(year, month + 1, 0).getDate();

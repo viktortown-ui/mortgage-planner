@@ -100,3 +100,48 @@ export interface ComparisonResult {
   interestSavings: number;
   monthsSaved: number;
 }
+
+export interface MortgageFullPlan {
+  totalPayment: number;
+  totalInterest: number;
+  totalInsuranceCost: number;
+  totalRealCost: number;
+  realCostMultiplier: number;
+  closingDate: string;
+  monthsTotal: number;
+  interestSavings: number;
+  monthsSaved: number;
+}
+
+export interface MortgageCurrentSnapshot {
+  asOfDate: string;
+  elapsedMonths: number;
+  paidTotal: number;
+  paidInterest: number;
+  paidPrincipal: number;
+  paidPrepayments: number;
+  paidInsurance: number;
+  currentDebt: number;
+  remainingToPay: number;
+  remainingInterest: number;
+  remainingInsurance: number;
+  progressPercent: number;
+}
+
+export interface MortgageScenarioSummary {
+  baseline: MortgageSummary;
+  active: MortgageSummary;
+  interestSavings: number;
+  monthsSaved: number;
+  hasPrepaymentEffect: boolean;
+}
+
+export interface MortgageSnapshot {
+  fullPlan: MortgageFullPlan;
+  currentSnapshot: MortgageCurrentSnapshot;
+  scenarioSummary: MortgageScenarioSummary;
+  calendarEvents: PaymentRow[];
+  chartsData: PaymentRow[];
+  tableData: PaymentRow[];
+  comparison: ComparisonResult;
+}

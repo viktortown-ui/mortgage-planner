@@ -32,20 +32,28 @@ export function applyPrepayments(
     prepaymentAmount += amount;
     events.push({ date: item.date, amount, mode: item.mode });
 
-    if (item.mode === 'reducePayment' && term > 0 && monthlyRate > 0) {
-      const factor = Math.pow(1 + monthlyRate, term);
-      if (Number.isFinite(factor) && factor !== 1) {
-        payment = Number(((debt * monthlyRate * factor) / (factor - 1)).toFixed(2));
+    if (item.mode === 'reducePayment' && term > 0) {
+      if (monthlyRate > 0) {
+        const factor = Math.pow(1 + monthlyRate, term);
+        if (Number.isFinite(factor) && factor !== 1) {
+          payment = Number(((debt * monthlyRate * factor) / (factor - 1)).toFixed(2));
+        }
+      } else {
+        payment = Number((debt / term).toFixed(2));
       }
     }
 
-    if (item.mode === 'reduceTerm' && payment > 0 && monthlyRate > 0) {
-      const denominator = payment - debt * monthlyRate;
-      if (denominator > 0) {
-        const value = Math.log(payment / denominator) / Math.log(1 + monthlyRate);
-        if (Number.isFinite(value)) {
-          term = Math.max(1, Math.ceil(value));
+    if (item.mode === 'reduceTerm' && payment > 0) {
+      if (monthlyRate > 0) {
+        const denominator = payment - debt * monthlyRate;
+        if (denominator > 0) {
+          const value = Math.log(payment / denominator) / Math.log(1 + monthlyRate);
+          if (Number.isFinite(value)) {
+            term = Math.max(1, Math.ceil(value));
+          }
         }
+      } else {
+        term = Math.max(1, Math.ceil(debt / payment));
       }
     }
   });
