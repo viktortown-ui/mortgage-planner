@@ -17,7 +17,8 @@ function KpiCard({ icon, title, value, note, accent = 'blue' }: { icon: IconName
 
 function Gauge({ value, label }: { value: number; label: string }) {
   const safe = Math.max(0, Math.min(100, value));
-  return <div className="mini-gauge" style={{ '--gauge': `${safe}%` } as CSSProperties}><div><strong>{percent(safe)}</strong><span>{label}</span></div></div>;
+  const fill = safe / 2;
+  return <div className="mini-gauge" style={{ '--gauge-fill': `${fill}%` } as CSSProperties}><div><strong>{percent(safe)}</strong><span>{label}</span></div></div>;
 }
 
 export function ResultSummary({ snapshot, input }: { snapshot: MortgageSnapshot; input: MortgageInput }) {
@@ -44,6 +45,8 @@ export function ResultSummary({ snapshot, input }: { snapshot: MortgageSnapshot;
   const effects = calculatePrepaymentEffects(input);
   const progress = Math.min(100, result.interestSavings > 0 ? (result.interestSavings / Math.max(1, result.baseline.summary.totalInterest)) * 100 : 0);
   const principalShare = input.loanAmount > 0 ? ((current.paidPrincipal + current.paidPrepayments) / input.loanAmount) * 100 : 0;
+  const realCostScaleMax = 3;
+  const realCostProgress = Math.min(100, (active.summary.realCostMultiplier / realCostScaleMax) * 100);
 
   return <>
     <section className="hero-summary">
@@ -69,6 +72,6 @@ export function ResultSummary({ snapshot, input }: { snapshot: MortgageSnapshot;
 
     <section className="panel section"><div className="section-heading"><Icon name="percent" /><div><h3>Что банк забирает на самом деле</h3><p>{timeMode === 'lifetime' ? 'За весь срок кредита.' : `На текущий момент: по платежам до ${current.asOfDate}.`}</p></div></div><div className="mode-switch"><button className={timeMode === 'lifetime' ? 'active-switch' : ''} type="button" onClick={() => setTimeMode('lifetime')}>За весь срок</button><button className={timeMode === 'current' ? 'active-switch' : ''} type="button" onClick={() => setTimeMode('current')}>На текущий момент</button></div>{timeMode === 'lifetime' ? <><div className="insights-grid"><div className="insight-card"><span>Проценты банку</span><strong>{formatMoney(active.summary.totalInterest)}</strong></div><div className="insight-card"><span>Первые 12 месяцев</span><strong>{formatMoney(firstYearInterest)}</strong><small>За первые 12 месяцев кредита банку уходит эта сумма процентов.</small></div><div className="insight-card"><span>Перелом графика</span><strong>{breakPoint ? breakPoint.date : '—'}</strong><small>С этого месяца тело платежа становится больше процентов.</small></div></div><p>За весь горизонт банк получает <b>{bankShareLifetime.toFixed(1)}%</b> от суммы регулярных платежей как проценты. В первый год тело долга уменьшается на {formatMoney(firstYearPrincipal)}.</p></> : <><div className="insights-grid"><div className="insight-card"><span>Уже уплачено процентов</span><strong>{formatMoney(current.paidInterest)}</strong></div><div className="insight-card"><span>Уже погашено тела</span><strong>{formatMoney(current.paidPrincipal + current.paidPrepayments)}</strong></div><div className="insight-card"><span>Доля банка в факте</span><strong>{bankShareCurrent.toFixed(1)}%</strong></div></div><p>За прошедшие <b>{current.elapsedMonths}</b> мес. реально уплачено {formatMoney(current.paidTotal)}, включая страховки {formatMoney(current.paidInsurance)} и досрочно {formatMoney(current.paidPrepayments)}.</p></>}</section>
 
-    <section className="panel section"><div className="section-heading"><Icon name="home" /><div><h3>Сколько квартир вы реально оплатите</h3><p>Полная стоимость переводится в понятный бытовой масштаб.</p></div></div><div className="real-cost-box"><strong>{active.summary.realCostMultiplier.toFixed(2)}× стоимости квартиры</strong><span>Квартира стоит {formatMoney(input.propertyPrice)}, а полный денежный поток по кредиту со страховками — {formatMoney(active.summary.totalRealCost)}.</span></div><div className="progress-track apartments"><span style={{ width: `${Math.min(100, active.summary.realCostMultiplier * 50)}%` }} /></div><p className="muted-note">Из этой суммы проценты банку равны примерно {bankApartmentEquivalent.toFixed(2)} стоимости квартиры.</p></section>
+    <section className="panel section"><div className="section-heading"><Icon name="home" /><div><h3>Сколько квартир вы реально оплатите</h3><p>Полная стоимость переводится в понятный бытовой масштаб.</p></div></div><div className="real-cost-box"><strong>{active.summary.realCostMultiplier.toFixed(2)}× стоимости квартиры</strong><span>Квартира стоит {formatMoney(input.propertyPrice)}, а полный денежный поток по кредиту со страховками — {formatMoney(active.summary.totalRealCost)}.</span></div><div className="progress-track apartments" aria-label={`Шкала реальной стоимости до ${realCostScaleMax} стоимостей квартиры`}><span style={{ width: `${realCostProgress}%` }} /></div><div className="saving-scale"><span>0×</span><span>{(realCostScaleMax / 2).toFixed(1)}×</span><span>{realCostScaleMax}× стоимости</span></div><p className="muted-note">Это нормированная шкала до {realCostScaleMax} стоимостей квартиры; проценты банку равны примерно {bankApartmentEquivalent.toFixed(2)} стоимости квартиры.</p></section>
   </>;
 }

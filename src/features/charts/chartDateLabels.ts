@@ -30,11 +30,19 @@ export function formatExactDate(date: string): string {
 }
 
 export function getMonthTickStep(pointsCount: number): number {
-  if (pointsCount <= 36) return 3;
-  if (pointsCount <= 120) return 6;
-  return 12;
+  if (pointsCount > 120) return 12;
+  if (pointsCount >= 60) return 6;
+  return 3;
 }
 
 export function shouldShowMonthTick(monthIndex: number, pointsCount: number, tickStep: number): boolean {
-  return monthIndex === 1 || monthIndex === pointsCount || (monthIndex - 1) % tickStep === 0;
+  if (monthIndex === 1) return true;
+
+  const isRegularTick = (monthIndex - 1) % tickStep === 0;
+  if (isRegularTick) return true;
+
+  if (monthIndex !== pointsCount) return false;
+
+  const previousRegularTick = 1 + Math.floor((pointsCount - 1) / tickStep) * tickStep;
+  return pointsCount - previousRegularTick >= Math.ceil(tickStep * 0.75);
 }

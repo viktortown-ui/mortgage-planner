@@ -37,11 +37,11 @@ type InterestPrincipalPoint = {
   insurance: number;
 };
 
-const MONTH_POINT_WIDTH = 18;
-const YEAR_POINT_WIDTH = 46;
+const MONTH_POINT_WIDTH = 22;
+const YEAR_POINT_WIDTH = 58;
 const MIN_CHART_WIDTH = 760;
-const MONTH_X_AXIS_HEIGHT = 86;
-const YEAR_X_AXIS_HEIGHT = 42;
+const MONTH_X_AXIS_HEIGHT = 104;
+const YEAR_X_AXIS_HEIGHT = 50;
 
 const chartColors = {
   interest: '#f97316',
@@ -211,15 +211,15 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
       >
         <div style={{ minWidth: minChartWidth }}>
           <ResponsiveContainer width="100%" height={370}>
-            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 20, right: 24, bottom: view === 'month' ? 88 : 38, left: 12 }}>
+            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 20, right: 42, bottom: view === 'month' ? 108 : 48, left: 16 }}>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeOpacity={1} strokeDasharray="3 6" />
               <XAxis
                 axisLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 dataKey="label"
                 height={view === 'month' ? MONTH_X_AXIS_HEIGHT : YEAR_X_AXIS_HEIGHT}
                 interval={0}
-                minTickGap={24}
-                tick={<RotatedMonthTick angle={view === 'month' ? -60 : 0} dy={view === 'month' ? 22 : 18} visibleLabels={visibleTickLabels} />}
+                minTickGap={34}
+                tick={<RotatedMonthTick angle={view === 'month' ? -55 : 0} dy={view === 'month' ? 28 : 20} visibleLabels={visibleTickLabels} />}
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
               />
               <YAxis
