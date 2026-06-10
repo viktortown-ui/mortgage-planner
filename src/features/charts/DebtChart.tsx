@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CartesianGrid, Legend, Line, LineChart, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CartesianGrid, Line, LineChart, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { TooltipContentProps, TooltipValueType } from 'recharts';
 import type { PaymentRow } from '../../core/mortgage/types';
 import { formatMoney } from '../../shared/formatMoney';
@@ -18,8 +18,8 @@ type DebtPoint = {
   remainingDebt: number;
 };
 
-const MONTH_POINT_WIDTH = 16;
-const YEAR_POINT_WIDTH = 56;
+const MONTH_POINT_WIDTH = 20;
+const YEAR_POINT_WIDTH = 64;
 const MIN_CHART_WIDTH = 760;
 
 function buildMonthlyData(schedule: PaymentRow[]): DebtPoint[] {
@@ -113,14 +113,14 @@ export function DebtChart({ schedule }: { schedule: PaymentRow[] }) {
       <div className="chart-scroll" role="region" aria-label="График остатка долга с горизонтальной прокруткой" tabIndex={0}>
         <div style={{ minWidth: minChartWidth }}>
           <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={data} margin={{ top: 18, right: 18, bottom: view === 'month' ? 72 : 24, left: 4 }}>
+            <LineChart data={data} margin={{ top: 18, right: 38, bottom: view === 'month' ? 92 : 40, left: 14 }}>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeOpacity={1} strokeDasharray="3 6" />
               <XAxis
                 axisLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 dataKey="label"
                 interval={0}
-                minTickGap={18}
-                tick={<RotatedMonthTick visibleLabels={visibleTickLabels} />}
+                minTickGap={32}
+                tick={<RotatedMonthTick dy={view === 'month' ? 24 : 18} visibleLabels={visibleTickLabels} />}
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
               />
               <YAxis
@@ -131,12 +131,21 @@ export function DebtChart({ schedule }: { schedule: PaymentRow[] }) {
                 width={54}
               />
               <Tooltip content={(props) => DebtTooltip(props, view)} cursor={{ stroke: 'var(--chart-cursor)', strokeWidth: 16 }} />
-              <Legend wrapperStyle={{ color: 'var(--chart-axis-text)', fontSize: 14, fontWeight: 700, paddingTop: 10 }} />
               <Line type="monotone" name="Остаток долга" dataKey="remainingDebt" stroke="#3b82f6" strokeWidth={4} dot={false} />
               {data.map((row) => row.prepayment > 0 ? <ReferenceDot key={row.label} x={row.label} y={row.remainingDebt} r={6} fill="#a855f7" stroke="var(--panel)" strokeWidth={2} /> : null)}
             </LineChart>
           </ResponsiveContainer>
         </div>
+      </div>
+      <div className="chart-fixed-legend" aria-label="Цвета графика">
+        <span className="chart-fixed-legend__item">
+          <span className="chart-fixed-legend__marker" style={{ background: '#3b82f6' }} />
+          Остаток долга
+        </span>
+        <span className="chart-fixed-legend__item">
+          <span className="chart-fixed-legend__marker" style={{ background: '#a855f7' }} />
+          Досрочно
+        </span>
       </div>
     </div>
   );
