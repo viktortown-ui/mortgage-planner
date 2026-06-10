@@ -1,4 +1,5 @@
 import { compareScenarios } from './compareScenarios';
+import { buildSnapshot } from './buildSnapshot';
 import { buildAutoScenario, type AutoScenarioSettings } from './scenarioInsights';
 import type { ComparisonResult, MortgageInput, PaymentType, PrepaymentMode } from './types';
 
@@ -16,6 +17,7 @@ export interface SmartScenarioInput {
 export interface MortgageViewModel {
   normalizedInput: MortgageInput;
   comparison: ComparisonResult | null;
+  snapshot: ReturnType<typeof buildSnapshot>;
   autoScenarioResult: ReturnType<typeof buildAutoScenario>;
   smartScenarioResults: Array<{ id: 'A' | 'B' | 'C'; result: ComparisonResult | null }>;
   hasPrepaymentEffect: boolean;
@@ -48,6 +50,7 @@ export function buildMortgageViewModel(
   smartScenarios: SmartScenarioInput[],
 ): MortgageViewModel {
   const comparison = compareScenarios(normalizedInput);
+  const snapshot = buildSnapshot(normalizedInput);
   const autoScenarioResult = buildAutoScenario(normalizedInput, autoScenario);
   const smartScenarioResults = smartScenarios.map((scenario) => {
     const prepayments = buildScenarioPrepayments(normalizedInput, scenario);
@@ -56,6 +59,7 @@ export function buildMortgageViewModel(
   return {
     normalizedInput,
     comparison,
+    snapshot,
     autoScenarioResult,
     smartScenarioResults,
     hasPrepaymentEffect: (comparison?.interestSavings ?? 0) > 0 || (comparison?.monthsSaved ?? 0) > 0,
