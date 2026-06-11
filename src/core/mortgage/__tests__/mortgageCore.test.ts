@@ -133,3 +133,75 @@ describe('schedule, insurance and snapshot consistency', () => {
     expect(comparison?.withPrepayments.summary.totalInsuranceCost).toBeGreaterThan(0);
   });
 });
+
+describe('strategy start modes', () => {
+  const sample: MortgageInput = {
+    propertyPrice: 2_300_000,
+    downPayment: 580_000,
+    loanAmount: 1_720_000,
+    annualRate: 10.9,
+    termYears: 20,
+    firstPaymentDate: '2023-09-11',
+    paymentType: 'annuity',
+    incomeMonthly: 95_000,
+    prepayments: [
+      { date: '2024-10-11', amount: 210_000, mode: 'reduceTerm' },
+      { date: '2025-02-11', amount: 100_000, mode: 'reduceTerm' },
+      { date: '2025-06-11', amount: 305_000, mode: 'reduceTerm' },
+    ],
+    insuranceRules: [{ id: 'annual-insurance', title: 'Страховка', type: 'propertyInsurance', amount: 4_000, startDate: '2023-09-11', frequency: 'annual', enabled: true }],
+  };
+
+  const scenario = { id: 'A' as const, amount: 20_000, frequency: 'monthly' as const, mode: 'reduceTerm' as const };
+  const asOf = new Date('2026-06-11T00:00:00Z');
+
+  it('calculates strategy from start against the full baseline schedule', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'loanStart' }, asOf);
+    expect(startPoint?.remainingPrincipal).toBe(sample.loanAmount);
+    expect(startPoint?.elapsedPayments).toBe(0);
+    const result = startPoint ? compareSmartScenario(sample, scenario, startPoint).result : null;
+    expect(result?.baseline.schedule[0]?.date).toBe('2023-09-11');
+    expect(result?.baseline.schedule.length).toBe(240);
+    expect(result?.interestSavings).toBeGreaterThan(0);
+  });
+
+  it('calculates strategy from current snapshot remaining principal', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'currentSnapshot' }, asOf);
+    expect(startPoint?.strategyDate).toBe('2026-06-11');
+    expect(startPoint?.remainingPrincipal).toBeGreaterThan(900_000);
+    expect(startPoint?.remainingPrincipal).toBeLessThan(970_000);
+    expect(startPoint?.elapsedPayments).toBeGreaterThan(0);
+    const result = startPoint ? compareSmartScenario(sample, scenario, startPoint).result : null;
+    expect(result?.baseline.schedule[0]?.date).toBe('2026-07-11');
+    expect(result?.baseline.schedule[0]?.remainingDebt).toBeLessThan(sample.loanAmount);
+    expect(result?.interestSavings).toBeGreaterThan(0);
+  });
+
+  it('calculates strategy from a custom future date', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'customDate', customDate: '2026-12-11' }, asOf);
+    expect(startPoint?.strategyDate).toBe('2026-12-11');
+    expect(startPoint?.warningMessages).toEqual([]);
+    const result = startPoint ? compareSmartScenario(sample, scenario, startPoint).result : null;
+    expect(result?.baseline.schedule[0]?.date).toBe('2027-01-11');
+    expect(result?.interestSavings).toBeGreaterThan(0);
+  });
+
+  it('warns when custom date is before the current date', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'customDate', customDate: '2026-01-11' }, asOf);
+    expect(startPoint?.warningMessages).toContain('Дата стратегии уже прошла. Выберите дату в будущем или используйте режим с начала кредита.');
+    const result = startPoint ? compareSmartScenario(sample, scenario, startPoint).result : null;
+    expect(result).toBeNull();
+  });
+
+  it('warns when custom date is after the closing date', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'customDate', customDate: '2045-01-11' }, asOf);
+    expect(startPoint?.warningMessages).toContain('Дата стратегии позже закрытия кредита.');
+    const result = startPoint ? compareSmartScenario(sample, scenario, startPoint).result : null;
+    expect(result).toBeNull();
+  });
+});
