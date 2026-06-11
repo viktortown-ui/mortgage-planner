@@ -9,6 +9,7 @@ import { DebtChart } from './features/charts/DebtChart';
 import { InterestPrincipalChart } from './features/charts/InterestPrincipalChart';
 import { MobileInputAccordion } from './features/mobile/MobileInputAccordion';
 import { loadFromStorage, saveToStorage } from './shared/storage';
+import { applyTheme, getStoredTheme, setStoredTheme, type AppTheme } from './shared/theme';
 import { normalizeMortgageInput } from './shared/normalizeMortgageInput';
 import { STORAGE_KEY } from './shared/resetAppData';
 import { refreshApplication, resetApplicationData } from './shared/appMaintenance';
@@ -19,7 +20,6 @@ import { MoneyInput } from './shared/ui/MoneyInput';
 import { Icon } from './shared/ui/Icon';
 import './styles/global.css';
 
-const THEME_KEY = 'mortgage-planner-theme';
 const defaultInput: MortgageInput = { propertyPrice: 10000000, downPayment: 2000000, loanAmount: 8000000, annualRate: 12, termYears: 20, firstPaymentDate: '2026-06-01', paymentType: 'annuity', prepayments: [], insuranceRules: [], incomeMonthly: undefined };
 const defaultAuto: AutoScenarioSettings = { amount: 0, frequency: 'monthly', mode: 'reduceTerm' };
 const defaultSmart: SmartScenarioInput[] = [
@@ -98,10 +98,10 @@ function App() {
   const [tab, setTab] = useState<DesktopTab>('overview');
   const [mobileTab, setMobileTab] = useState<MobileTab>('overview');
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'));
+  const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
   const actionMenuRef = useRef<HTMLDetailsElement>(null);
 
-  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); saveToStorage(THEME_KEY, theme); }, [theme]);
+  useEffect(() => { applyTheme(theme); setStoredTheme(theme); }, [theme]);
 
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light');
   const safeSetInput = (next: MortgageInput) => {

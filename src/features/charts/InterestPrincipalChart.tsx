@@ -19,6 +19,8 @@ import {
   shouldShowMonthTick,
 } from './chartDateLabels';
 import { RotatedMonthTick } from './RotatedMonthTick';
+import { useMediaQuery } from './useMediaQuery';
+import { useMobileChartSelection } from './useMobileChartSelection';
 
 type ChartView = 'month' | 'year';
 
@@ -45,6 +47,7 @@ function getDefaultChartView(): ChartView {
   return typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'year' : 'month';
 }
 const MONTH_X_AXIS_HEIGHT = 104;
+const MOBILE_MONTH_X_AXIS_HEIGHT = 132;
 const YEAR_X_AXIS_HEIGHT = 50;
 
 const chartColors = {
@@ -141,6 +144,32 @@ function formatTooltipLabel(row: InterestPrincipalPoint | undefined, fallbackLab
   return eventDetails ? `${title} · досрочно: ${eventDetails}` : title;
 }
 
+
+function MobileInterestPrincipalInfoPanel({ point, view, onClose }: { point: InterestPrincipalPoint; view: ChartView; onClose: () => void }) {
+  const title = formatTooltipLabel(point, point.label, view);
+  const rows = [
+    { label: 'Платёж', value: point.regularPayment },
+    { label: 'Проценты', value: point.interest },
+    { label: 'Тело', value: point.principal },
+    { label: 'Досрочно', value: point.prepayment + point.prepaymentEvent },
+    { label: 'Страховки', value: point.insurance },
+    { label: 'Остаток', value: point.remainingDebt },
+  ];
+
+  return (
+    <div className="mobile-chart-info" role="status" aria-live="polite">
+      <div className="mobile-chart-info__head">
+        <strong>Выбранный период</strong>
+        <button type="button" aria-label="Закрыть данные графика" onClick={onClose}>×</button>
+      </div>
+      <div className="mobile-chart-info__title">{title}</div>
+      <dl>
+        {rows.map((row) => <div key={row.label}><dt>{row.label}</dt><dd>{formatMoney(row.value)}</dd></div>)}
+      </dl>
+    </div>
+  );
+}
+
 function ChartTooltip({ active, label, payload }: TooltipContentProps<TooltipValueType, string | number>, view: ChartView) {
   if (!active || !payload.length) return null;
 
@@ -173,6 +202,7 @@ function ChartTooltip({ active, label, payload }: TooltipContentProps<TooltipVal
 }
 
 export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] }) {
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const [view, setView] = useState<ChartView>(() => getDefaultChartView());
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
@@ -196,16 +226,20 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
     }),
   ), [data, monthTickStep, view]);
   const minChartWidth = Math.max(MIN_CHART_WIDTH, data.length * (view === 'month' ? MONTH_POINT_WIDTH : YEAR_POINT_WIDTH));
+  const mobileMonthAxisAngle = data.length > 120 ? -75 : -65;
+  const xAxisHeight = isMobile && view === 'month' ? MOBILE_MONTH_X_AXIS_HEIGHT : view === 'month' ? MONTH_X_AXIS_HEIGHT : YEAR_X_AXIS_HEIGHT;
+  const chartBottomMargin = isMobile && view === 'month' ? 132 : view === 'month' ? 108 : 48;
+  const { closeSelection, selectedPoint, selectFromChartState } = useMobileChartSelection(data, isMobile);
 
   return (
     <div className="chart">
       <div className="table-head">
         <h3>Денежный поток по времени</h3>
         <div>
-          <button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => setView('month')}>
+          <button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => { closeSelection(); setView('month'); }}>
             По месяцам
           </button>
-          <button type="button" className={view === 'year' ? 'active-switch' : ''} onClick={() => setView('year')}>
+          <button type="button" className={view === 'year' ? 'active-switch' : ''} onClick={() => { closeSelection(); setView('year'); }}>
             По годам
           </button>
         </div>
@@ -218,18 +252,19 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
         role="region"
         aria-label="График процентов и тела долга с горизонтальной прокруткой"
         tabIndex={0}
+        onScroll={closeSelection}
       >
-        <div style={{ minWidth: minChartWidth }}>
+        <div className="chart-scroll__inner" style={{ width: minChartWidth }}>
           <ResponsiveContainer width="100%" height={370}>
-            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 20, right: 42, bottom: view === 'month' ? 108 : 48, left: 16 }}>
+            <BarChart barCategoryGap="18%" barGap={2} data={data} margin={{ top: 20, right: 42, bottom: chartBottomMargin, left: 16 }} onClick={selectFromChartState} onTouchMove={closeSelection}>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeOpacity={1} strokeDasharray="3 6" />
               <XAxis
                 axisLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 dataKey="label"
-                height={view === 'month' ? MONTH_X_AXIS_HEIGHT : YEAR_X_AXIS_HEIGHT}
+                height={xAxisHeight}
                 interval={0}
                 minTickGap={34}
-                tick={<RotatedMonthTick angle={view === 'month' ? -55 : 0} dy={view === 'month' ? 28 : 20} visibleLabels={visibleTickLabels} />}
+                tick={<RotatedMonthTick angle={isMobile && view === 'month' ? mobileMonthAxisAngle : view === 'month' ? -55 : 0} dx={isMobile && view === 'month' ? -4 : 0} dy={isMobile && view === 'month' ? 36 : view === 'month' ? 28 : 20} visibleLabels={visibleTickLabels} />}
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
               />
               <YAxis
@@ -240,7 +275,7 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 width={54}
               />
-              <Tooltip content={(props) => ChartTooltip(props, view)} cursor={{ fill: 'var(--chart-cursor)' }} />
+              <Tooltip active={isMobile ? false : undefined} content={(props) => ChartTooltip(props, view)} cursor={{ fill: 'var(--chart-cursor)' }} />
               <Bar
                 stackId="pay"
                 name="Проценты"
@@ -288,6 +323,7 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
           </ResponsiveContainer>
         </div>
       </div>
+      {isMobile && selectedPoint ? <MobileInterestPrincipalInfoPanel point={selectedPoint} view={view} onClose={closeSelection} /> : null}
       <div className="chart-fixed-legend" aria-label="Цвета графика">
         <span className="chart-fixed-legend__item">
           <span className="chart-fixed-legend__marker" style={{ background: chartColors.prepayment }} />

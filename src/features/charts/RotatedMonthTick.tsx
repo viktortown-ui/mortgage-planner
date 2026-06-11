@@ -11,7 +11,7 @@ interface RotatedMonthTickProps extends SVGProps<SVGTextElement> {
   y?: number;
 }
 
-export function RotatedMonthTick({ angle = -60, dy = 22, x = 0, y = 0, payload, visibleLabels }: RotatedMonthTickProps) {
+export function RotatedMonthTick({ angle = -60, dx = 0, dy = 22, x = 0, y = 0, payload, visibleLabels }: RotatedMonthTickProps) {
   const value = payload?.value;
   const label = value === undefined ? undefined : visibleLabels.get(value);
 
@@ -23,7 +23,7 @@ export function RotatedMonthTick({ angle = -60, dy = 22, x = 0, y = 0, payload, 
 
   return (
     <text
-      x={x}
+      x={x + Number(dx)}
       y={tickY}
       fill="var(--chart-axis-text)"
       fontSize={12}
