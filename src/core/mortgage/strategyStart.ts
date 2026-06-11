@@ -1,7 +1,7 @@
 import { buildSchedule } from './buildSchedule';
 import { buildSnapshot } from './buildSnapshot';
 import { expandInsuranceSchedule } from './insuranceSchedule';
-import type { CalculationResult, ComparisonResult, InsuranceRule, MortgageInput, PaymentRow, PrepaymentMode } from './types';
+import type { CalculationResult, ComparisonResult, InsuranceRule, MortgageInput, PaymentRow, PrepaymentMode, StrategyPaymentMetrics } from './types';
 
 export type StrategyStartMode = 'loanStart' | 'currentSnapshot' | 'customDate';
 export type ScenarioFrequency = 'monthly' | 'quarterly' | 'semiAnnual' | 'annual';
@@ -104,14 +104,68 @@ function buildStrategyPrepayments(scenario: SmartScenarioInput, startDate: strin
   return list;
 }
 
-function compareResults(baseline: CalculationResult, withPrepayments: CalculationResult): ComparisonResult {
+
+function averagePayment(rows: PaymentRow[]): number {
+  if (!rows.length) return 0;
+  return Number((rows.reduce((sum, row) => sum + row.payment, 0) / rows.length).toFixed(2));
+}
+
+function incomeLoad(payment: number, income?: number): number | undefined {
+  if (!income || income <= 0) return undefined;
+  return Number((payment / income).toFixed(4));
+}
+
+function buildStrategyPaymentMetrics(
+  baseline: CalculationResult,
+  withPrepayments: CalculationResult,
+  mode: PrepaymentMode,
+  incomeMonthly: number | undefined,
+  interestSavings: number,
+  monthsSaved: number,
+): StrategyPaymentMetrics {
+  const baselineMonthlyPayment = baseline.schedule[0]?.payment ?? baseline.monthlyPayment ?? 0;
+  const firstPrepayIndex = withPrepayments.schedule.findIndex((row) => row.prepaymentEvents?.some((event) => event.mode === mode));
+  const firstPaymentAfterStrategy = firstPrepayIndex >= 0
+    ? (withPrepayments.schedule[firstPrepayIndex + 1]?.payment ?? withPrepayments.schedule[firstPrepayIndex]?.payment ?? 0)
+    : (withPrepayments.schedule[0]?.payment ?? 0);
+  const averagePaymentNext12Months = averagePayment(withPrepayments.schedule.slice(0, 12));
+  const averagePaymentRemaining = averagePayment(withPrepayments.schedule);
+  const paymentAfterForRelief = mode === 'reducePayment' ? firstPaymentAfterStrategy : (withPrepayments.schedule[0]?.payment ?? baselineMonthlyPayment);
+  const monthlyPaymentReduction = Number(Math.max(0, baselineMonthlyPayment - paymentAfterForRelief).toFixed(2));
+  const monthlyPaymentReductionPercent = baselineMonthlyPayment > 0 ? Number(((monthlyPaymentReduction / baselineMonthlyPayment) * 100).toFixed(1)) : 0;
+  const incomeLoadBefore = incomeLoad(baselineMonthlyPayment, incomeMonthly);
+  const incomeLoadAfter = incomeLoad(Math.max(0, baselineMonthlyPayment - monthlyPaymentReduction), incomeMonthly);
+  const annualFreedCashflow = Number((monthlyPaymentReduction * 12).toFixed(2));
+  return {
+    baselineMonthlyPayment,
+    firstPaymentAfterStrategy,
+    averagePaymentNext12Months,
+    averagePaymentRemaining,
+    monthlyPaymentReduction,
+    monthlyPaymentReductionPercent,
+    incomeLoadBefore,
+    incomeLoadAfter,
+    incomeLoadDelta: incomeLoadBefore !== undefined && incomeLoadAfter !== undefined ? Number((incomeLoadBefore - incomeLoadAfter).toFixed(4)) : undefined,
+    annualFreedCashflow,
+    lifeEffectLabel: mode === 'reduceTerm' ? 'Сильнее режет проценты и срок.' : 'Снижает ежемесячное давление, но экономит меньше процентов.',
+    strategyObjectiveScores: {
+      interestSavingScore: interestSavings,
+      paymentReliefScore: monthlyPaymentReduction,
+      balanceScore: interestSavings * 0.5 + monthlyPaymentReduction * 120 * 0.3 + Math.max(0, monthsSaved) * 1000 * 0.2,
+    },
+  };
+}
+
+function compareResults(baseline: CalculationResult, withPrepayments: CalculationResult, mode?: PrepaymentMode, incomeMonthly?: number): ComparisonResult {
   const interestSavings = Number((baseline.summary.totalInterest - withPrepayments.summary.totalInterest).toFixed(2));
+  const monthsSaved = baseline.schedule.length - withPrepayments.schedule.length;
   return {
     baseline,
     withPrepayments,
     interestSavings,
     interestSavedByPrepayments: interestSavings,
-    monthsSaved: baseline.schedule.length - withPrepayments.schedule.length,
+    monthsSaved,
+    paymentMetrics: mode ? buildStrategyPaymentMetrics(baseline, withPrepayments, mode, incomeMonthly, interestSavings, monthsSaved) : undefined,
   };
 }
 
@@ -206,7 +260,7 @@ export function compareSmartScenario(
     const baseline = buildSchedule({ ...input, prepayments: [] }, false);
     const prepayments = buildStrategyPrepayments(scenario, input.firstPaymentDate, input.termYears * 12);
     const withPrepayments = buildSchedule({ ...input, prepayments }, true);
-    return { id: scenario.id, result: baseline && withPrepayments ? compareResults(baseline, withPrepayments) : null, warnings };
+    return { id: scenario.id, result: baseline && withPrepayments ? compareResults(baseline, withPrepayments, scenario.mode, input.incomeMonthly) : null, warnings };
   }
 
   if (startPoint.remainingPrincipal <= 0 || startPoint.baselineFutureMonths <= 0) {
@@ -218,7 +272,7 @@ export function compareSmartScenario(
   const baseline = buildSchedule(futureInput, false);
   const prepayments = buildStrategyPrepayments(scenario, startPoint.scheduleStartDate, startPoint.baselineFutureMonths);
   const withPrepayments = buildSchedule({ ...futureInput, prepayments }, true);
-  return { id: scenario.id, result: baseline && withPrepayments ? compareResults(baseline, withPrepayments) : null, warnings };
+  return { id: scenario.id, result: baseline && withPrepayments ? compareResults(baseline, withPrepayments, scenario.mode, input.incomeMonthly) : null, warnings };
 }
 
 export function futureInsuranceEvents(input: MortgageInput, startDate: string, closingDate: string) {

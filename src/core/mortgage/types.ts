@@ -94,13 +94,36 @@ export interface ScenarioResult {
   result: CalculationResult;
 }
 
+export interface StrategyObjectiveScores {
+  interestSavingScore: number;
+  paymentReliefScore: number;
+  balanceScore: number;
+}
+
+export interface StrategyPaymentMetrics {
+  baselineMonthlyPayment: number;
+  firstPaymentAfterStrategy: number;
+  averagePaymentNext12Months: number;
+  averagePaymentRemaining: number;
+  monthlyPaymentReduction: number;
+  monthlyPaymentReductionPercent: number;
+  incomeLoadBefore?: number;
+  incomeLoadAfter?: number;
+  incomeLoadDelta?: number;
+  annualFreedCashflow: number;
+  lifeEffectLabel: string;
+  strategyObjectiveScores: StrategyObjectiveScores;
+}
+
 export interface ComparisonResult {
   baseline: CalculationResult;
   withPrepayments: CalculationResult;
   interestSavings: number;
   interestSavedByPrepayments: number;
   monthsSaved: number;
+  paymentMetrics?: StrategyPaymentMetrics;
 }
+
 
 export interface MortgageFullPlan {
   totalPayment: number;
@@ -118,6 +141,12 @@ export interface MortgageFullPlan {
 
 export interface MortgageCurrentSnapshot {
   asOfDate: string;
+  originalMonthlyPayment: number;
+  currentScheduledPayment: number;
+  nextScheduledPayment: number;
+  paymentAfterNextReducePayment?: number;
+  monthlyPaymentReduction: number;
+  annualFreedCashflow: number;
   elapsedMonths: number;
   paidTotal: number;
   paidInterest: number;
@@ -140,6 +169,19 @@ export interface MortgageCurrentSnapshot {
   progressPercent: number;
 }
 
+export interface ReducePaymentImpact {
+  hasReducePayment: boolean;
+  alreadyApplied: boolean;
+  nextReducePaymentDate?: string;
+  paymentBefore: number;
+  paymentAfter: number;
+  monthlyPaymentReduction: number;
+  annualFreedCashflow: number;
+  incomeLoadBefore?: number;
+  incomeLoadAfter?: number;
+  incomeLoadDelta?: number;
+}
+
 export interface MortgageScenarioSummary {
   baseline: MortgageSummary;
   active: MortgageSummary;
@@ -147,6 +189,7 @@ export interface MortgageScenarioSummary {
   interestSavedByPrepayments: number;
   monthsSaved: number;
   hasPrepaymentEffect: boolean;
+  reducePaymentImpact: ReducePaymentImpact;
 }
 
 export interface MortgageSnapshot {

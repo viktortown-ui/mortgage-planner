@@ -8,6 +8,14 @@ const modeLabel = (mode: PrepaymentMode) => (mode === 'reduceTerm' ? 'умень
 const durationText = (months: number) => months >= 12 ? `${Math.floor(months / 12)} г. ${months % 12} мес.` : `${months} мес.`;
 const percent = (value: number) => `${Math.round(value)}%`;
 const formatMultiplier = (value: number) => `${value.toFixed(2)}×`;
+const formatLoad = (value?: number) => value === undefined ? '—' : `${Math.round(value * 100)}%`;
+const readableLoadZone = (value?: number) => {
+  if (value === undefined) return 'доход не указан';
+  if (value < 0.3) return 'зелёная';
+  if (value < 0.4) return 'жёлтая';
+  if (value < 0.5) return 'оранжевая';
+  return 'красная';
+};
 
 type TimeMode = 'lifetime' | 'current';
 type Accent = 'blue' | 'green' | 'orange' | 'violet' | 'gold' | 'slate';
@@ -61,6 +69,14 @@ export function ResultSummary({ snapshot, input }: { snapshot: MortgageSnapshot;
   const insuranceApartmentEquivalent = input.propertyPrice > 0 ? active.summary.totalInsuranceCost / input.propertyPrice : 0;
   const savedApartmentEquivalent = input.propertyPrice > 0 ? result.interestSavings / input.propertyPrice : 0;
   const totalCashflowApartmentEquivalent = input.propertyPrice > 0 ? active.summary.totalRealCost / input.propertyPrice : 0;
+  const reducePaymentImpact = snapshot.scenarioSummary.reducePaymentImpact;
+  const paymentCardTitle = reducePaymentImpact.hasReducePayment ? (reducePaymentImpact.alreadyApplied ? 'Текущий платёж' : 'Сейчас платёж') : 'Ежемесячный платёж';
+  const paymentCardValue = formatMoney(reducePaymentImpact.hasReducePayment ? current.currentScheduledPayment : (active.monthlyPayment ?? active.schedule[0]?.payment ?? 0));
+  const paymentCardNote = reducePaymentImpact.hasReducePayment
+    ? reducePaymentImpact.alreadyApplied
+      ? `Было ${formatMoney(reducePaymentImpact.paymentBefore)}, стало ${formatMoney(reducePaymentImpact.paymentAfter)} · −${formatMoney(reducePaymentImpact.monthlyPaymentReduction)}/мес.`
+      : `После досрочки от ${reducePaymentImpact.nextReducePaymentDate ?? '—'} станет примерно ${formatMoney(reducePaymentImpact.paymentAfter)} · снижение −${formatMoney(reducePaymentImpact.monthlyPaymentReduction)}/мес.`
+    : 'регулярный платёж без страховок';
   const effects = useMemo(() => calculatePrepaymentEffects(input), [input]);
   const bestBySavings = effects.reduce<PrepaymentEffectInsight | undefined>((best, effect) => !best || effect.interestSavings > best.interestSavings ? effect : best, undefined);
   const biggestByAmount = effects.reduce<PrepaymentEffectInsight | undefined>((biggest, effect) => !biggest || effect.totalAmount > biggest.totalAmount ? effect : biggest, undefined);
@@ -84,12 +100,34 @@ export function ResultSummary({ snapshot, input }: { snapshot: MortgageSnapshot;
       <div className="hero-gauges"><Gauge value={principalShare} label="тела погашено" /><Gauge value={incomeRatio ? incomeRatio * 100 : 0} label="нагрузка" /></div>
       <div className="summary-groups">
         <KpiCard icon="home" title="Сумма кредита" value={formatMoney(input.loanAmount)} note="тело кредита на старте" />
-        <KpiCard icon="calendar" title="Ежемесячный платёж" value={formatMoney(active.monthlyPayment ?? active.schedule[0]?.payment ?? 0)} note="регулярный платёж без страховок" />
+        <KpiCard icon="calendar" title={paymentCardTitle} value={paymentCardValue} note={paymentCardNote} accent={reducePaymentImpact.hasReducePayment ? 'violet' : 'blue'} />
         <KpiCard icon="calendar" title="Дата закрытия" value={snapshot.fullPlan.closingDate} note={`${snapshot.fullPlan.monthsTotal} платежей`} accent="green" />
         <KpiCard icon="percent" title="Проценты за весь срок" value={formatMoney(snapshot.fullPlan.totalInterestFullPlan)} note={`${bankShareLifetime.toFixed(1)}% регулярных платежей`} accent="orange" help="Сколько банк получит сверх суммы кредита." />
         <KpiCard icon="shield" title="Страховки за весь срок" value={formatMoney(snapshot.fullPlan.totalInsuranceCost)} note="не уменьшают тело долга" accent="gold" />
         <KpiCard icon="income" title="Рекомендованный доход" value={`${formatMoney(recommendedIncomeComfort)}/мес.`} note="комфортная нагрузка до 30%" accent="green" />
       </div>
+    </section>
+
+
+    {reducePaymentImpact.hasReducePayment ? <section className="panel section payment-relief-panel">
+      <div className="section-heading"><Icon name="income" /><div><h3>Как изменится ежемесячная нагрузка</h3><p>Режим «уменьшить платёж» показываем отдельно от экономии срока.</p></div></div>
+      <div className="insights-grid">
+        <MetricCard title="Сейчас платёж" value={`${formatMoney(reducePaymentImpact.paymentBefore)}/мес.`} accent="blue" />
+        <MetricCard title="После снижения" value={`${formatMoney(reducePaymentImpact.paymentAfter)}/мес.`} accent="violet" />
+        <MetricCard title="Освободится" value={`${formatMoney(reducePaymentImpact.monthlyPaymentReduction)}/мес.`} accent="green" />
+        <MetricCard title="За год это" value={formatMoney(reducePaymentImpact.annualFreedCashflow)} accent="green" />
+      </div>
+      {reducePaymentImpact.incomeLoadBefore !== undefined ? <p className="explain-note">Платёж снизится с {formatMoney(reducePaymentImpact.paymentBefore)} до {formatMoney(reducePaymentImpact.paymentAfter)}. Нагрузка на доход снизится с {formatLoad(reducePaymentImpact.incomeLoadBefore)} до {formatLoad(reducePaymentImpact.incomeLoadAfter)}: зона была {readableLoadZone(reducePaymentImpact.incomeLoadBefore)}, станет {readableLoadZone(reducePaymentImpact.incomeLoadAfter)}.</p> : <p className="muted-note">Доход не указан — нагрузку оценить нельзя.</p>}
+      <p className="muted-note">Этот режим не обязан сильно сокращать срок. Его смысл — сделать ежемесячную жизнь легче.</p>
+    </section> : null}
+
+    <section className="panel section choice-help-panel">
+      <div className="section-heading"><Icon name="shield" /><div><h3>Что выбрать?</h3><p>Два режима решают разные жизненные задачи.</p></div></div>
+      <div className="insights-grid">
+        <MetricCard title="Уменьшить срок" value="Больше экономия" note="Больше экономия процентов, быстрее закрытие кредита." accent="blue" />
+        <MetricCard title="Уменьшить платёж" value="Меньше давление" note="Меньше ежемесячное давление, больше свободных денег каждый месяц." accent="violet" />
+      </div>
+      <p className="explain-note">Математически чаще выгоднее уменьшать срок. Но если важнее запас и спокойствие — снижение платежа может быть жизненно сильнее.</p>
     </section>
 
     <section className="panel section now-panel">
@@ -137,11 +175,16 @@ export function ResultSummary({ snapshot, input }: { snapshot: MortgageSnapshot;
         <dl>
           <div><dt>{effect.count > 1 ? 'Всего внесено' : 'Внесено'}</dt><dd>{formatMoney(effect.totalAmount)}</dd></div>
           <div><dt>Экономия процентов</dt><dd>{formatMoney(effect.interestSavings)}</dd></div>
-          <div><dt>Срок сокращён</dt><dd>{durationText(effect.monthsSaved)}</dd></div>
+          {effect.mode === 'reduceTerm' ? <div><dt>Срок сокращён</dt><dd>{durationText(effect.monthsSaved)}</dd></div> : null}
+          {effect.mode === 'reducePayment' ? <>
+            <div><dt>Платёж до</dt><dd>{formatMoney(effect.paymentBefore ?? 0)}</dd></div>
+            <div><dt>Платёж после</dt><dd>{formatMoney(effect.paymentAfter ?? 0)}</dd></div>
+            <div><dt>Освободилось в месяц</dt><dd>{formatMoney(effect.monthlyFreed ?? 0)}</dd></div>
+          </> : null}
           <div><dt>Режим</dt><dd>{modeLabel(effect.mode)}</dd></div>
           {effect.count > 1 ? <div><dt>Средний эффект одного платежа</dt><dd>{formatMoney(effect.interestSavings / effect.count)}</dd></div> : null}
         </dl>
-        <small>Вклад считается как разница между текущим планом и планом без этого платежа.</small>
+        {effect.mode === 'reducePayment' ? <small>{effect.isFuture ? `Платёж снизится после даты: ${effect.date}.` : `Платёж уже снижен с ${formatMoney(effect.paymentBefore ?? 0)} до ${formatMoney(effect.paymentAfter ?? 0)}.`}</small> : <small>Вклад считается как разница между текущим планом и планом без этого платежа.</small>}
       </article>)}</div> : <p className="muted-note">Пока нет досрочных платежей с положительной суммой.</p>}
     </section>
 

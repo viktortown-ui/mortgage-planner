@@ -205,3 +205,92 @@ describe('strategy start modes', () => {
     expect(result).toBeNull();
   });
 });
+
+describe('smart scenario payment relief metrics', () => {
+  const sample: MortgageInput = {
+    propertyPrice: 2_300_000,
+    downPayment: 580_000,
+    loanAmount: 1_720_000,
+    annualRate: 10.9,
+    termYears: 20,
+    firstPaymentDate: '2023-09-11',
+    paymentType: 'annuity',
+    incomeMonthly: 95_000,
+    prepayments: [
+      { date: '2024-10-11', amount: 210_000, mode: 'reduceTerm' },
+      { date: '2025-02-11', amount: 100_000, mode: 'reduceTerm' },
+      { date: '2025-06-11', amount: 305_000, mode: 'reduceTerm' },
+    ],
+    insuranceRules: [],
+  };
+  const asOf = new Date('2026-06-11T00:00:00Z');
+
+  it('keeps reduceTerm focused on interest saving and term reduction', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'currentSnapshot' }, asOf);
+    const result = startPoint ? compareSmartScenario(sample, { id: 'A', amount: 100_000, frequency: 'semiAnnual', mode: 'reduceTerm' }, startPoint).result : null;
+    expect(result?.interestSavings).toBeGreaterThan(0);
+    expect(result?.monthsSaved).toBeGreaterThan(0);
+    expect(result?.paymentMetrics?.monthlyPaymentReduction).toBe(0);
+  });
+
+  it('calculates reducePayment monthly payment and income load decrease', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'currentSnapshot' }, asOf);
+    const result = startPoint ? compareSmartScenario(sample, { id: 'B', amount: 100_000, frequency: 'semiAnnual', mode: 'reducePayment' }, startPoint).result : null;
+    expect(result?.paymentMetrics?.baselineMonthlyPayment).toBeGreaterThan(result?.paymentMetrics?.firstPaymentAfterStrategy ?? 0);
+    expect(result?.paymentMetrics?.monthlyPaymentReduction).toBeGreaterThan(0);
+    expect(result?.paymentMetrics?.incomeLoadBefore).toBeGreaterThan(result?.paymentMetrics?.incomeLoadAfter ?? 0);
+    expect(result?.paymentMetrics?.annualFreedCashflow).toBeCloseTo((result?.paymentMetrics?.monthlyPaymentReduction ?? 0) * 12, 2);
+  });
+
+  it('allows payment objective to pick reducePayment while interest objective picks reduceTerm', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'currentSnapshot' }, asOf);
+    const scenarios = [
+      { id: 'A' as const, amount: 100_000, frequency: 'semiAnnual' as const, mode: 'reduceTerm' as const },
+      { id: 'B' as const, amount: 100_000, frequency: 'semiAnnual' as const, mode: 'reducePayment' as const },
+      { id: 'C' as const, amount: 50_000, frequency: 'quarterly' as const, mode: 'reducePayment' as const },
+    ];
+    const results = startPoint ? scenarios.map((scenario) => compareSmartScenario(sample, scenario, startPoint)) : [];
+    const bestInterest = results.toSorted((a, b) => (b.result?.interestSavings ?? 0) - (a.result?.interestSavings ?? 0))[0];
+    const bestPayment = results.toSorted((a, b) => (b.result?.paymentMetrics?.monthlyPaymentReduction ?? 0) - (a.result?.paymentMetrics?.monthlyPaymentReduction ?? 0))[0];
+    expect(bestInterest.id).toBe('A');
+    expect(bestPayment.result ? scenarios.find((scenario) => scenario.id === bestPayment.id)?.mode : undefined).toBe('reducePayment');
+  });
+
+  it('current moment strategy compares against future baseline, not the full original loan', async () => {
+    const { compareSmartScenario, resolveStrategyStartPoint } = await import('../strategyStart');
+    const startPoint = resolveStrategyStartPoint(sample, { mode: 'currentSnapshot' }, asOf);
+    const result = startPoint ? compareSmartScenario(sample, { id: 'C', amount: 50_000, frequency: 'quarterly', mode: 'reducePayment' }, startPoint).result : null;
+    expect(result?.baseline.schedule[0]?.date).toBe('2026-07-11');
+    expect(result?.baseline.schedule.length).toBe(startPoint?.baselineFutureMonths);
+    expect(result?.baseline.schedule[0]?.remainingDebt).toBeLessThan(sample.loanAmount);
+  });
+});
+
+describe('overview reducePayment impact', () => {
+  it('shows already applied reducePayment as current payment relief', () => {
+    const input: MortgageInput = {
+      ...baseInput,
+      firstPaymentDate: '2025-01-12',
+      prepayments: [{ date: '2025-06-12', amount: 200_000, mode: 'reducePayment' }],
+    };
+    const snapshot = buildSnapshot(input, new Date('2026-01-12T00:00:00Z'));
+    expect(snapshot?.scenarioSummary.reducePaymentImpact.alreadyApplied).toBe(true);
+    expect(snapshot?.currentSnapshot.monthlyPaymentReduction).toBeGreaterThan(0);
+    expect(snapshot?.currentSnapshot.currentScheduledPayment).toBeLessThan(snapshot?.currentSnapshot.originalMonthlyPayment ?? 0);
+  });
+
+  it('shows future reducePayment without changing current scheduled payment immediately', () => {
+    const input: MortgageInput = {
+      ...baseInput,
+      firstPaymentDate: '2025-01-12',
+      prepayments: [{ date: '2026-06-12', amount: 200_000, mode: 'reducePayment' }],
+    };
+    const snapshot = buildSnapshot(input, new Date('2026-01-12T00:00:00Z'));
+    expect(snapshot?.scenarioSummary.reducePaymentImpact.alreadyApplied).toBe(false);
+    expect(snapshot?.scenarioSummary.reducePaymentImpact.monthlyPaymentReduction).toBeGreaterThan(0);
+    expect(snapshot?.currentSnapshot.currentScheduledPayment).toBeCloseTo(snapshot?.currentSnapshot.originalMonthlyPayment ?? 0, 0);
+  });
+});
