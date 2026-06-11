@@ -5,6 +5,8 @@ import type { PaymentRow } from '../../core/mortgage/types';
 import { formatMoney } from '../../shared/formatMoney';
 import { formatFullMonth, formatShortMonthYear, getMonthTickStep, shouldShowMonthTick } from './chartDateLabels';
 import { RotatedMonthTick } from './RotatedMonthTick';
+import { useMediaQuery } from './useMediaQuery';
+import { useMobileChartSelection } from './useMobileChartSelection';
 
 type ChartView = 'month' | 'year';
 
@@ -21,6 +23,8 @@ type DebtPoint = {
 const MONTH_POINT_WIDTH = 20;
 const YEAR_POINT_WIDTH = 64;
 const MIN_CHART_WIDTH = 760;
+const MOBILE_MONTH_X_AXIS_HEIGHT = 126;
+const MOBILE_MONTH_CHART_BOTTOM = 126;
 
 function getDefaultChartView(): ChartView {
   return typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'year' : 'month';
@@ -67,6 +71,28 @@ function buildYearlyData(schedule: PaymentRow[]): DebtPoint[] {
   return Array.from(byYear.values());
 }
 
+
+function MobileDebtInfoPanel({ point, view, onClose }: { point: DebtPoint; view: ChartView; onClose: () => void }) {
+  const title = view === 'month'
+    ? `Месяц ${point.monthIndex ?? point.label} · ${formatFullMonth(point.date)}`
+    : `Год ${point.label}`;
+
+  return (
+    <div className="mobile-chart-info" role="status" aria-live="polite">
+      <div className="mobile-chart-info__head">
+        <strong>Выбранный период</strong>
+        <button type="button" aria-label="Закрыть данные графика" onClick={onClose}>×</button>
+      </div>
+      <div className="mobile-chart-info__title">{title}</div>
+      <dl>
+        <div><dt>Остаток</dt><dd>{formatMoney(point.remainingDebt)}</dd></div>
+        <div><dt>Платёж</dt><dd>{formatMoney(point.payment)}</dd></div>
+        <div><dt>Досрочно</dt><dd>{formatMoney(point.prepayment)}</dd></div>
+      </dl>
+    </div>
+  );
+}
+
 function DebtTooltip({ active, label, payload }: TooltipContentProps<TooltipValueType, string | number>, view: ChartView) {
   if (!active || !payload.length) return null;
 
@@ -91,6 +117,7 @@ function DebtTooltip({ active, label, payload }: TooltipContentProps<TooltipValu
 }
 
 export function DebtChart({ schedule }: { schedule: PaymentRow[] }) {
+  const isMobile = useMediaQuery('(max-width: 767px)');
   const [view, setView] = useState<ChartView>(() => getDefaultChartView());
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)');
@@ -110,27 +137,32 @@ export function DebtChart({ schedule }: { schedule: PaymentRow[] }) {
     }),
   ), [data, monthTickStep, view]);
   const minChartWidth = Math.max(MIN_CHART_WIDTH, data.length * (view === 'month' ? MONTH_POINT_WIDTH : YEAR_POINT_WIDTH));
+  const mobileMonthAxisAngle = data.length > 120 ? -75 : -65;
+  const xAxisHeight = isMobile && view === 'month' ? MOBILE_MONTH_X_AXIS_HEIGHT : view === 'month' ? 96 : 44;
+  const chartBottomMargin = isMobile && view === 'month' ? MOBILE_MONTH_CHART_BOTTOM : view === 'month' ? 92 : 40;
+  const { closeSelection, selectedPoint, selectFromChartState } = useMobileChartSelection(data, isMobile);
 
   return (
     <div className="chart">
       <div className="table-head">
         <h3>Остаток долга</h3>
         <div>
-          <button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => setView('month')}>По месяцам</button>
-          <button type="button" className={view === 'year' ? 'active-switch' : ''} onClick={() => setView('year')}>По годам</button>
+          <button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => { closeSelection(); setView('month'); }}>По месяцам</button>
+          <button type="button" className={view === 'year' ? 'active-switch' : ''} onClick={() => { closeSelection(); setView('year'); }}>По годам</button>
         </div>
       </div>
-      <div className="chart-scroll" role="region" aria-label="График остатка долга с горизонтальной прокруткой" tabIndex={0}>
-        <div style={{ minWidth: minChartWidth }}>
+      <div className="chart-scroll" role="region" aria-label="График остатка долга с горизонтальной прокруткой" tabIndex={0} onScroll={closeSelection}>
+        <div className="chart-scroll__inner" style={{ width: minChartWidth }}>
           <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={data} margin={{ top: 18, right: 38, bottom: view === 'month' ? 92 : 40, left: 14 }}>
+            <LineChart data={data} margin={{ top: 18, right: 38, bottom: chartBottomMargin, left: 14 }} onClick={selectFromChartState} onTouchMove={closeSelection}>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeOpacity={1} strokeDasharray="3 6" />
               <XAxis
                 axisLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 dataKey="label"
+                height={xAxisHeight}
                 interval={0}
                 minTickGap={32}
-                tick={<RotatedMonthTick dy={view === 'month' ? 24 : 18} visibleLabels={visibleTickLabels} />}
+                tick={<RotatedMonthTick angle={isMobile && view === 'month' ? mobileMonthAxisAngle : view === 'month' ? -60 : 0} dx={isMobile && view === 'month' ? -4 : 0} dy={isMobile && view === 'month' ? 34 : view === 'month' ? 24 : 18} visibleLabels={visibleTickLabels} />}
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
               />
               <YAxis
@@ -140,13 +172,14 @@ export function DebtChart({ schedule }: { schedule: PaymentRow[] }) {
                 tickLine={{ stroke: 'var(--chart-axis)', strokeWidth: 1 }}
                 width={54}
               />
-              <Tooltip content={(props) => DebtTooltip(props, view)} cursor={{ stroke: 'var(--chart-cursor)', strokeWidth: 16 }} />
+              <Tooltip active={isMobile ? false : undefined} content={(props) => DebtTooltip(props, view)} cursor={{ stroke: 'var(--chart-cursor)', strokeWidth: 16 }} />
               <Line type="monotone" name="Остаток долга" dataKey="remainingDebt" stroke="#3b82f6" strokeWidth={4} dot={false} />
               {data.map((row) => row.prepayment > 0 ? <ReferenceDot key={row.label} x={row.label} y={row.remainingDebt} r={6} fill="#a855f7" stroke="var(--panel)" strokeWidth={2} /> : null)}
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
+      {isMobile && selectedPoint ? <MobileDebtInfoPanel point={selectedPoint} view={view} onClose={closeSelection} /> : null}
       <div className="chart-fixed-legend" aria-label="Цвета графика">
         <span className="chart-fixed-legend__item">
           <span className="chart-fixed-legend__marker" style={{ background: '#3b82f6' }} />
