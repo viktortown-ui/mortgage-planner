@@ -1,9 +1,44 @@
 import { compareScenarios } from './compareScenarios';
-import type { MortgageCurrentSnapshot, MortgageFullPlan, MortgageInput, MortgageSnapshot, PaymentRow } from './types';
+import type { MortgageCurrentSnapshot, MortgageFullPlan, MortgageInput, MortgageSnapshot, PaymentRow, ReducePaymentImpact } from './types';
 
 function isoToday(date = new Date()): string { return date.toISOString().slice(0, 10); }
 function sumRows(rows: PaymentRow[], selector: (row: PaymentRow) => number): number {
   return Number(rows.reduce((sum, row) => sum + selector(row), 0).toFixed(2));
+}
+
+function loadRatio(payment: number, income?: number): number | undefined {
+  if (!income || income <= 0) return undefined;
+  return Number((payment / income).toFixed(4));
+}
+
+function findReducePaymentImpact(input: MortgageInput, rows: PaymentRow[], asOfDate: string): ReducePaymentImpact {
+  const reduceRows = rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => row.prepaymentEvents?.some((event) => event.mode === 'reducePayment'));
+  if (!reduceRows.length) {
+    return { hasReducePayment: false, alreadyApplied: false, paymentBefore: 0, paymentAfter: 0, monthlyPaymentReduction: 0, annualFreedCashflow: 0 };
+  }
+
+  const alreadyAppliedItems = reduceRows.filter(({ row }) => row.date <= asOfDate);
+  const selected = alreadyAppliedItems.at(-1) ?? reduceRows[0];
+  const afterRow = rows[selected.index + 1] ?? selected.row;
+  const paymentBefore = selected.row.payment;
+  const paymentAfter = afterRow.payment;
+  const monthlyPaymentReduction = Number(Math.max(0, paymentBefore - paymentAfter).toFixed(2));
+  const incomeLoadBefore = loadRatio(paymentBefore, input.incomeMonthly);
+  const incomeLoadAfter = loadRatio(paymentAfter, input.incomeMonthly);
+  return {
+    hasReducePayment: true,
+    alreadyApplied: selected.row.date <= asOfDate,
+    nextReducePaymentDate: selected.row.date,
+    paymentBefore,
+    paymentAfter,
+    monthlyPaymentReduction,
+    annualFreedCashflow: Number((monthlyPaymentReduction * 12).toFixed(2)),
+    incomeLoadBefore,
+    incomeLoadAfter,
+    incomeLoadDelta: incomeLoadBefore !== undefined && incomeLoadAfter !== undefined ? Number((incomeLoadBefore - incomeLoadAfter).toFixed(4)) : undefined,
+  };
 }
 
 export function buildSnapshot(input: MortgageInput, asOf: Date = new Date()): MortgageSnapshot | null {
@@ -39,9 +74,18 @@ export function buildSnapshot(input: MortgageInput, asOf: Date = new Date()): Mo
   const remainingInterest = sumRows(futureRows, (row) => row.interest);
   const remainingInsurance = sumRows(futureRows, (row) => row.insuranceCost);
   const remainingTotalCashflow = Number((remainingPrincipal + remainingInterest + remainingInsurance).toFixed(2));
+  const reducePaymentImpact = findReducePaymentImpact(input, active.schedule, asOfDate);
+  const nextScheduledPayment = futureRows[0]?.payment ?? 0;
+  const currentScheduledPayment = nextScheduledPayment || lastPaidRow?.payment || active.monthlyPayment || 0;
 
   const currentSnapshot: MortgageCurrentSnapshot = {
     asOfDate,
+    originalMonthlyPayment: comparison.baseline.monthlyPayment ?? comparison.baseline.schedule[0]?.payment ?? 0,
+    currentScheduledPayment,
+    nextScheduledPayment,
+    paymentAfterNextReducePayment: reducePaymentImpact.hasReducePayment ? reducePaymentImpact.paymentAfter : undefined,
+    monthlyPaymentReduction: reducePaymentImpact.monthlyPaymentReduction,
+    annualFreedCashflow: reducePaymentImpact.annualFreedCashflow,
     elapsedMonths: paidRows.length,
     paidTotal,
     paidInterest,
@@ -74,6 +118,7 @@ export function buildSnapshot(input: MortgageInput, asOf: Date = new Date()): Mo
       interestSavedByPrepayments: comparison.interestSavedByPrepayments,
       monthsSaved: comparison.monthsSaved,
       hasPrepaymentEffect: comparison.interestSavings > 0 || comparison.monthsSaved > 0,
+      reducePaymentImpact,
     },
     calendarEvents: active.schedule,
     chartsData: active.schedule,

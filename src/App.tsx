@@ -50,59 +50,88 @@ const frequencyLabels: Record<SmartScenarioInput['frequency'], string> = {
   annual: 'раз в год',
 };
 
+type UserObjective = 'interest' | 'payment' | 'balance' | 'risk';
+
+const objectiveLabels: Record<UserObjective, string> = {
+  interest: 'Максимально сэкономить проценты',
+  payment: 'Снизить ежемесячный платёж',
+  balance: 'Найти баланс',
+  risk: 'Снизить риск перегруза',
+};
+
+function formatLoad(value?: number) {
+  return value === undefined ? '—' : `${Math.round(value * 100)}%`;
+}
+
+function loadZone(value?: number) {
+  if (value === undefined) return 'Доход не указан';
+  if (value < 0.3) return 'зелёная зона';
+  if (value < 0.4) return 'жёлтая зона';
+  if (value < 0.5) return 'оранжевая зона';
+  return 'красная зона';
+}
+
+function maxByReady(
+  ready: ReturnType<typeof buildMortgageViewModel>['smartScenarioResults'],
+  getValue: (item: ReturnType<typeof buildMortgageViewModel>['smartScenarioResults'][number]) => number,
+) {
+  return ready.toSorted((a, b) => getValue(b) - getValue(a))[0];
+}
+
 function ScenarioSection({ results, scenarios, setScenarios, strategyStart, setStrategyStart, startPoint }: ScenarioSectionProps) {
+  const [objective, setObjective] = useState<UserObjective>('balance');
   const ready = results.filter((item) => item.result);
-  const winner = ready.toSorted((a, b) => (b.result?.interestSavings ?? 0) - (a.result?.interestSavings ?? 0))[0];
+  const bestInterest = maxByReady(ready, (item) => item.result?.interestSavings ?? 0);
+  const bestPayment = maxByReady(ready, (item) => item.result?.paymentMetrics?.monthlyPaymentReduction ?? 0);
+  const bestBalance = maxByReady(ready, (item) => item.result?.paymentMetrics?.strategyObjectiveScores.balanceScore ?? 0);
+  const highlighted = objective === 'interest' ? bestInterest : objective === 'payment' || objective === 'risk' ? bestPayment : bestBalance;
   const startModeLabels: Record<StrategyStartMode, string> = { loanStart: 'С начала кредита', currentSnapshot: 'С текущего момента', customDate: 'С выбранной даты' };
   const startWarnings = Array.from(new Set(results.flatMap((item) => item.warnings)));
   const onModeChange = (mode: StrategyStartMode) => setStrategyStart((current) => ({ ...current, mode }));
+  const bottomText = highlighted?.result ? objective === 'interest'
+    ? `Лучшая по экономии: ${highlighted.id} — срезает ${formatMoney(highlighted.result.interestSavings)} будущих процентов и закрывает кредит на ${Math.max(0, highlighted.result.monthsSaved)} мес. раньше.`
+    : objective === 'payment' || objective === 'risk'
+      ? `Лучшая по снижению платежа: ${highlighted.id} — уменьшает ежемесячную нагрузку примерно на ${formatMoney(highlighted.result.paymentMetrics?.monthlyPaymentReduction ?? 0)}/мес. и снижает долю платежа в доходе с ${formatLoad(highlighted.result.paymentMetrics?.incomeLoadBefore)} до ${formatLoad(highlighted.result.paymentMetrics?.incomeLoadAfter)}.`
+      : `Лучший баланс: ${highlighted.id} — заметно снижает проценты, но не перегружает ежемесячный бюджет.`
+    : '';
 
   return (
     <div className="panel section scenario-section">
       <div className="section-heading"><Icon name="chart" /><div><h3>Умное досрочное погашение</h3><p>Сравнение с будущим планом без новой стратегии. Прошедшие платежи не пересчитываются.</p></div></div>
+      <div className="objective-switch"><strong>Что для вас важнее?</strong><div>{(Object.entries(objectiveLabels) as Array<[UserObjective, string]>).map(([value, label]) => <button key={value} type="button" className={objective === value ? 'active-switch' : ''} onClick={() => setObjective(value)}>{label}</button>)}</div></div>
+      <div className="strategy-badges">
+        {bestInterest?.result ? <span>Лучшая по экономии: <b>{bestInterest.id}</b></span> : null}
+        {bestPayment?.result ? <span>Лучшая по снижению платежа: <b>{bestPayment.id}</b></span> : null}
+        {bestBalance?.result ? <span>Лучший баланс: <b>{bestBalance.id}</b></span> : null}
+      </div>
       <div className="strategy-start-controls">
         <label>От какой точки считать стратегию?<select value={strategyStart.mode} onChange={(event) => onModeChange(event.target.value as StrategyStartMode)}><option value="loanStart">С начала кредита</option><option value="currentSnapshot">С текущего момента</option><option value="customDate">С выбранной даты</option></select></label>
         {strategyStart.mode === 'customDate' ? <label>Дата старта стратегии<DateInput value={strategyStart.customDate ?? startPoint?.strategyDate ?? ''} onValueChange={(customDate) => setStrategyStart((current) => ({ ...current, customDate }))} /></label> : null}
       </div>
       {startPoint ? <div className="strategy-start-card"><h4>Точка старта стратегии</h4><p>Стратегия считается с {formatDate(startPoint.strategyDate)}. На эту дату остаток тела кредита: {formatMoney(startPoint.remainingPrincipal)}. Прошлая история не меняется.</p><dl><div><dt>Режим расчёта</dt><dd>{startModeLabels[startPoint.mode]}</dd></div><div><dt>Дата старта стратегии</dt><dd>{formatDate(startPoint.strategyDate)}</dd></div><div><dt>Остаток тела кредита</dt><dd>{formatMoney(startPoint.remainingPrincipal)}</dd></div><div><dt>Платежей уже прошло</dt><dd>{startPoint.elapsedPayments}</dd></div><div><dt>Процентов уже оплачено</dt><dd>{formatMoney(startPoint.paidInterest)}</dd></div><div><dt>Досрочно уже внесено</dt><dd>{formatMoney(startPoint.paidPrepayments)}</dd></div></dl><small>Стратегия применяется только к оставшемуся долгу.</small></div> : null}
       {startWarnings.length ? <div className="scenario-warnings">{startWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div> : null}
-      {winner?.result ? <div className="winner-card mobile-winner"><strong>Лучшая стратегия: {winner.id}</strong><span>Экономия будущих процентов {formatMoney(winner.result.interestSavings)} · минус {winner.result.monthsSaved} мес.</span></div> : null}
       {scenarios.every((scenario) => scenario.amount <= 0) ? <p className="muted-note">Введите сумму, чтобы увидеть эффект.</p> : null}
       <div className="scenario-grid">
         {scenarios.map((scenario, idx) => {
           const scenarioResult = results[idx]?.result;
-          const averageInsurance = scenarioResult ? scenarioResult.withPrepayments.summary.totalInsuranceCost / Math.max(1, scenarioResult.withPrepayments.schedule.length) : 0;
-          const recommendedIncome = scenarioResult ? ((scenarioResult.withPrepayments.monthlyPayment ?? 0) + averageInsurance) / 0.3 : 0;
-          const apartmentCost = scenarioResult ? scenarioResult.withPrepayments.summary.totalRealCost / Math.max(1, scenarioResult.withPrepayments.schedule[0]?.remainingDebt ?? 1) : 0;
-          const isWinner = winner?.id === scenario.id && Boolean(scenarioResult);
-
+          const metrics = scenarioResult?.paymentMetrics;
+          const isHighlighted = highlighted?.id === scenario.id && Boolean(scenarioResult);
+          const isReducePayment = scenario.mode === 'reducePayment';
           return (
-            <div key={scenario.id} className={`scenario-card${isWinner ? ' is-best' : ''}`}>
-              <div className="scenario-card__head">
-                <h4>Стратегия {scenario.id}</h4>
-                {isWinner ? <span>Лучший эффект</span> : null}
-              </div>
-              <div className="scenario-card__inputs">
-                <label>Сумма<MoneyInput value={scenario.amount} onValueChange={(amount) => { setScenarios((items) => items.map((item, i) => i === idx ? { ...item, amount } : item)); }} /></label>
-                <label>Частота<select value={scenario.frequency} onChange={(e) => setScenarios((items) => items.map((item, i) => i === idx ? { ...item, frequency: e.target.value as SmartScenarioInput['frequency'] } : item))}>{Object.entries(frequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                <label>Режим<select value={scenario.mode} onChange={(e) => setScenarios((items) => items.map((item, i) => i === idx ? { ...item, mode: e.target.value as SmartScenarioInput['mode'] } : item))}><option value="reduceTerm">уменьшать срок</option><option value="reducePayment">уменьшать платёж</option></select></label>
-              </div>
-              {scenarioResult ? (
-                <div className="scenario-metrics">
-                  <div><span>Будущая переплата процентов</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalInterest)}</strong></div>
-                  <div><span>Экономия будущих процентов</span><strong>{formatMoney(scenarioResult.interestSavings)}</strong></div>
-                  <div><span>Сокращение срока</span><strong>{scenarioResult.monthsSaved} мес.</strong></div>
-                  <div><span>Будущая реальная стоимость</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalRealCost)}</strong></div>
-                  <div><span>Дата закрытия</span><strong>{scenarioResult.withPrepayments.summary.closingDate}</strong></div>
-                  <div><span>Рекомендуемый доход</span><strong>{formatMoney(recommendedIncome)}</strong></div>
-                  <div><span>Стоимость в квартирах</span><strong>{apartmentCost.toFixed(2)}×</strong></div>
-                </div>
-              ) : <small className="muted-note">{results[idx]?.warnings.at(-1) ?? 'Введите сумму, чтобы увидеть эффект.'}</small>}
+            <div key={scenario.id} className={`scenario-card scenario-card--${scenario.mode}${isHighlighted ? ' is-best' : ''}`}>
+              <div className="scenario-card__head"><h4>Стратегия {scenario.id}</h4>{isHighlighted ? <span>{objectiveLabels[objective]}</span> : <span>{isReducePayment ? 'меньше платёж' : 'меньше срок'}</span>}</div>
+              <div className="scenario-card__inputs"><label>Сумма<MoneyInput value={scenario.amount} onValueChange={(amount) => { setScenarios((items) => items.map((item, i) => i === idx ? { ...item, amount } : item)); }} /></label><label>Частота<select value={scenario.frequency} onChange={(e) => setScenarios((items) => items.map((item, i) => i === idx ? { ...item, frequency: e.target.value as SmartScenarioInput['frequency'] } : item))}>{Object.entries(frequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Режим<select value={scenario.mode} onChange={(e) => setScenarios((items) => items.map((item, i) => i === idx ? { ...item, mode: e.target.value as SmartScenarioInput['mode'] } : item))}><option value="reduceTerm">уменьшать срок</option><option value="reducePayment">уменьшать платёж</option></select></label></div>
+              {scenarioResult && metrics ? <>
+                <div className="scenario-block"><h5>Деньги банку</h5><div className="scenario-metrics"><div><span>Будущая переплата процентов</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalInterest)}</strong></div><div><span>Экономия будущих процентов</span><strong>{formatMoney(scenarioResult.interestSavings)}</strong></div></div></div>
+                <div className="scenario-block"><h5>Срок</h5><div className="scenario-metrics"><div><span>Дата закрытия</span><strong>{scenarioResult.withPrepayments.summary.closingDate}</strong></div><div><span>{isReducePayment ? 'Срок не главный результат' : 'Сокращение срока'}</span><strong>{Math.max(0, scenarioResult.monthsSaved)} мес.</strong></div></div></div>
+                <div className="scenario-block"><h5>Ежемесячная нагрузка</h5><div className="scenario-metrics"><div><span>Платёж сейчас</span><strong>{formatMoney(metrics.baselineMonthlyPayment)}</strong></div><div><span>Платёж после стратегии</span><strong>{formatMoney(metrics.firstPaymentAfterStrategy)}</strong></div><div><span>Средний платёж 12 мес.</span><strong>{formatMoney(metrics.averagePaymentNext12Months)}</strong></div><div><span>Средний платёж до конца</span><strong>{formatMoney(metrics.averagePaymentRemaining)}</strong></div><div><span>Снижение платежа</span><strong>{formatMoney(metrics.monthlyPaymentReduction)}/мес.</strong><small>{metrics.monthlyPaymentReductionPercent}%</small></div><div><span>Освободится за год</span><strong>{formatMoney(metrics.annualFreedCashflow)}</strong></div></div><div className="load-indicator"><b>Месячная нагрузка</b>{metrics.incomeLoadBefore === undefined ? <span>Введите доход, чтобы оценить, насколько легче станет ежемесячная нагрузка.</span> : <span>Было: {formatLoad(metrics.incomeLoadBefore)} · стало: {formatLoad(metrics.incomeLoadAfter)} · свободнее: +{formatMoney(metrics.monthlyPaymentReduction)}/мес. · {loadZone(metrics.incomeLoadAfter)}</span>}</div></div>
+                <div className="life-effect"><h5>Жизненный эффект</h5>{isReducePayment ? <><p>Платёж ниже на {formatMoney(metrics.monthlyPaymentReduction)}/мес.</p><p>За год освободится примерно {formatMoney(metrics.annualFreedCashflow)}.</p><p>Нагрузка на доход снизится с {formatLoad(metrics.incomeLoadBefore)} до {formatLoad(metrics.incomeLoadAfter)}.</p><p>Подходит, если цель — снизить ежемесячное давление и сохранить запас.</p></> : <><p>Закрытие быстрее на {Math.max(0, scenarioResult.monthsSaved)} мес.</p><p>Экономия процентов: {formatMoney(scenarioResult.interestSavings)}</p><p>Подходит, если цель — быстрее выйти из долга.</p></>}<strong>{metrics.lifeEffectLabel}</strong></div>
+              </> : <small className="muted-note">{results[idx]?.warnings.at(-1) ?? 'Введите сумму, чтобы увидеть эффект.'}</small>}
             </div>
           );
         })}
       </div>
-      {winner?.result ? <div className="winner-card desktop-winner"><strong>Лучшая стратегия: {winner.id}</strong><span>Она экономит будущих процентов {formatMoney(winner.result.interestSavings)} и снимает {winner.result.monthsSaved} мес. срока. Сравнение с будущим планом без новой стратегии.</span></div> : null}
+      {bottomText ? <div className="winner-card desktop-winner"><strong>{bottomText}</strong><span>Меньшая переплата — не всегда лучшая стратегия для жизни. Иногда снижение платежа важнее, если нужен запас и спокойствие.</span></div> : null}
     </div>
   );
 }
