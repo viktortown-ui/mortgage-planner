@@ -13,10 +13,12 @@ import { applyTheme, getStoredTheme, setStoredTheme, type AppTheme } from './sha
 import { normalizeMortgageInput } from './shared/normalizeMortgageInput';
 import { STORAGE_KEY } from './shared/resetAppData';
 import { refreshApplication, resetApplicationData } from './shared/appMaintenance';
-import { buildMortgageViewModel, type SmartScenarioInput } from './core/mortgage/viewModel';
+import { buildMortgageViewModel, type SmartScenarioInput, type StrategyStartMode, type StrategyStartSettings } from './core/mortgage/viewModel';
 import { runPrepaymentDiagnostics } from './core/mortgage/prepaymentDiagnostics';
 import { formatMoney } from './shared/formatMoney';
 import { MoneyInput } from './shared/ui/MoneyInput';
+import { DateInput } from './shared/ui/DateInput';
+import { formatDate } from './shared/formatDate';
 import { Icon } from './shared/ui/Icon';
 import './styles/global.css';
 
@@ -27,11 +29,15 @@ const defaultSmart: SmartScenarioInput[] = [
   { id: 'B', amount: 0, frequency: 'quarterly', mode: 'reduceTerm' },
   { id: 'C', amount: 0, frequency: 'annual', mode: 'reducePayment' },
 ];
+const defaultStrategyStart: StrategyStartSettings = { mode: 'currentSnapshot' };
 
 type ScenarioSectionProps = {
   results: ReturnType<typeof buildMortgageViewModel>['smartScenarioResults'];
   scenarios: SmartScenarioInput[];
   setScenarios: Dispatch<SetStateAction<SmartScenarioInput[]>>;
+  strategyStart: StrategyStartSettings;
+  setStrategyStart: Dispatch<SetStateAction<StrategyStartSettings>>;
+  startPoint: ReturnType<typeof buildMortgageViewModel>['strategyStartPoint'];
 };
 
 type DesktopTab = 'overview' | 'schedule' | 'scenarios';
@@ -44,15 +50,24 @@ const frequencyLabels: Record<SmartScenarioInput['frequency'], string> = {
   annual: 'раз в год',
 };
 
-function ScenarioSection({ results, scenarios, setScenarios }: ScenarioSectionProps) {
+function ScenarioSection({ results, scenarios, setScenarios, strategyStart, setStrategyStart, startPoint }: ScenarioSectionProps) {
   const ready = results.filter((item) => item.result);
   const winner = ready.toSorted((a, b) => (b.result?.interestSavings ?? 0) - (a.result?.interestSavings ?? 0))[0];
+  const startModeLabels: Record<StrategyStartMode, string> = { loanStart: 'С начала кредита', currentSnapshot: 'С текущего момента', customDate: 'С выбранной даты' };
+  const startWarnings = Array.from(new Set(results.flatMap((item) => item.warnings)));
+  const onModeChange = (mode: StrategyStartMode) => setStrategyStart((current) => ({ ...current, mode }));
 
   return (
     <div className="panel section scenario-section">
-      <div className="section-heading"><Icon name="chart" /><div><h3>Умное досрочное погашение</h3><p>Сравните A / B / C по тем же правилам текущего расчёта.</p></div></div>
-      {winner?.result ? <div className="winner-card mobile-winner"><strong>Лучшая стратегия: {winner.id}</strong><span>Экономия {formatMoney(winner.result.interestSavings)} · минус {winner.result.monthsSaved} мес.</span></div> : null}
-      {scenarios.every((scenario) => scenario.amount <= 0) ? <p className="muted-note">Введите параметры стратегии, чтобы сравнить варианты досрочного погашения.</p> : null}
+      <div className="section-heading"><Icon name="chart" /><div><h3>Умное досрочное погашение</h3><p>Сравнение с будущим планом без новой стратегии. Прошедшие платежи не пересчитываются.</p></div></div>
+      <div className="strategy-start-controls">
+        <label>От какой точки считать стратегию?<select value={strategyStart.mode} onChange={(event) => onModeChange(event.target.value as StrategyStartMode)}><option value="loanStart">С начала кредита</option><option value="currentSnapshot">С текущего момента</option><option value="customDate">С выбранной даты</option></select></label>
+        {strategyStart.mode === 'customDate' ? <label>Дата старта стратегии<DateInput value={strategyStart.customDate ?? startPoint?.strategyDate ?? ''} onValueChange={(customDate) => setStrategyStart((current) => ({ ...current, customDate }))} /></label> : null}
+      </div>
+      {startPoint ? <div className="strategy-start-card"><h4>Точка старта стратегии</h4><p>Стратегия считается с {formatDate(startPoint.strategyDate)}. На эту дату остаток тела кредита: {formatMoney(startPoint.remainingPrincipal)}. Прошлая история не меняется.</p><dl><div><dt>Режим расчёта</dt><dd>{startModeLabels[startPoint.mode]}</dd></div><div><dt>Дата старта стратегии</dt><dd>{formatDate(startPoint.strategyDate)}</dd></div><div><dt>Остаток тела кредита</dt><dd>{formatMoney(startPoint.remainingPrincipal)}</dd></div><div><dt>Платежей уже прошло</dt><dd>{startPoint.elapsedPayments}</dd></div><div><dt>Процентов уже оплачено</dt><dd>{formatMoney(startPoint.paidInterest)}</dd></div><div><dt>Досрочно уже внесено</dt><dd>{formatMoney(startPoint.paidPrepayments)}</dd></div></dl><small>Стратегия применяется только к оставшемуся долгу.</small></div> : null}
+      {startWarnings.length ? <div className="scenario-warnings">{startWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div> : null}
+      {winner?.result ? <div className="winner-card mobile-winner"><strong>Лучшая стратегия: {winner.id}</strong><span>Экономия будущих процентов {formatMoney(winner.result.interestSavings)} · минус {winner.result.monthsSaved} мес.</span></div> : null}
+      {scenarios.every((scenario) => scenario.amount <= 0) ? <p className="muted-note">Введите сумму, чтобы увидеть эффект.</p> : null}
       <div className="scenario-grid">
         {scenarios.map((scenario, idx) => {
           const scenarioResult = results[idx]?.result;
@@ -74,19 +89,20 @@ function ScenarioSection({ results, scenarios, setScenarios }: ScenarioSectionPr
               </div>
               {scenarioResult ? (
                 <div className="scenario-metrics">
-                  <div><span>Переплата</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalInterest)}</strong></div>
-                  <div><span>Экономия</span><strong>{formatMoney(scenarioResult.interestSavings)}</strong></div>
-                  <div><span>Срок</span><strong>{scenarioResult.withPrepayments.schedule.length} мес.</strong></div>
+                  <div><span>Будущая переплата процентов</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalInterest)}</strong></div>
+                  <div><span>Экономия будущих процентов</span><strong>{formatMoney(scenarioResult.interestSavings)}</strong></div>
+                  <div><span>Сокращение срока</span><strong>{scenarioResult.monthsSaved} мес.</strong></div>
+                  <div><span>Будущая реальная стоимость</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalRealCost)}</strong></div>
                   <div><span>Дата закрытия</span><strong>{scenarioResult.withPrepayments.summary.closingDate}</strong></div>
                   <div><span>Рекомендуемый доход</span><strong>{formatMoney(recommendedIncome)}</strong></div>
                   <div><span>Стоимость в квартирах</span><strong>{apartmentCost.toFixed(2)}×</strong></div>
                 </div>
-              ) : <small className="muted-note">Введите сумму для расчёта.</small>}
+              ) : <small className="muted-note">{results[idx]?.warnings.at(-1) ?? 'Введите сумму, чтобы увидеть эффект.'}</small>}
             </div>
           );
         })}
       </div>
-      {winner?.result ? <div className="winner-card desktop-winner"><strong>Лучшая стратегия: {winner.id}</strong><span>Она экономит {formatMoney(winner.result.interestSavings)} и снимает {winner.result.monthsSaved} мес. срока относительно базового графика.</span></div> : null}
+      {winner?.result ? <div className="winner-card desktop-winner"><strong>Лучшая стратегия: {winner.id}</strong><span>Она экономит будущих процентов {formatMoney(winner.result.interestSavings)} и снимает {winner.result.monthsSaved} мес. срока. Сравнение с будущим планом без новой стратегии.</span></div> : null}
     </div>
   );
 }
@@ -95,6 +111,7 @@ function App() {
   const [input, setInput] = useState<MortgageInput>(() => loadFromStorage(STORAGE_KEY, defaultInput));
   const [autoScenario] = useState<AutoScenarioSettings>(defaultAuto);
   const [smartScenarios, setSmartScenarios] = useState<SmartScenarioInput[]>(defaultSmart);
+  const [strategyStart, setStrategyStart] = useState<StrategyStartSettings>(defaultStrategyStart);
   const [tab, setTab] = useState<DesktopTab>('overview');
   const [mobileTab, setMobileTab] = useState<MobileTab>('overview');
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
@@ -111,7 +128,7 @@ function App() {
   };
 
   const normalizedInput = useMemo(() => normalizeMortgageInput(input, defaultInput), [input]);
-  const viewModel = useMemo(() => buildMortgageViewModel(normalizedInput, autoScenario, smartScenarios), [normalizedInput, autoScenario, smartScenarios]);
+  const viewModel = useMemo(() => buildMortgageViewModel(normalizedInput, autoScenario, smartScenarios, strategyStart), [normalizedInput, autoScenario, smartScenarios, strategyStart]);
   const result = viewModel.comparison;
   const snapshot = viewModel.snapshot;
 
@@ -135,7 +152,7 @@ function App() {
       : mobileTab === 'charts'
         ? <><DebtChart schedule={snapshot.chartsData} /><InterestPrincipalChart schedule={snapshot.chartsData} /></>
         : mobileTab === 'scenarios'
-          ? <ScenarioSection results={viewModel.smartScenarioResults} scenarios={smartScenarios} setScenarios={setSmartScenarios} />
+          ? <ScenarioSection results={viewModel.smartScenarioResults} scenarios={smartScenarios} setScenarios={setSmartScenarios} strategyStart={strategyStart} setStrategyStart={setStrategyStart} startPoint={viewModel.strategyStartPoint} />
           : <PaymentTable schedule={snapshot.tableData} prepayments={normalizedInput.prepayments} />;
 
   return <div className="app">
@@ -144,7 +161,7 @@ function App() {
     <main className="layout desktop-shell"><aside className="left-col"><MortgageInputForm input={normalizedInput} onChange={safeSetInput} error={error} />
       {snapshot && <section className="panel input-card compact-calendar"><div className="section-heading"><Icon name="calendar" /><div><h3>Календарь</h3><p>Платежи, досрочки и страховки в одном месячном виде.</p></div></div><PaymentCalendar schedule={snapshot.calendarEvents} prepayments={normalizedInput.prepayments} insuranceEvents={snapshot.scenarioSummary.active.insuranceEvents} /></section>}
     </aside><section className="results"><div className="panel tabs-panel"><div className="tabs"><button className={tab === 'overview' ? 'active-switch' : ''} onClick={() => setTab('overview')}>Обзор</button><button className={tab === 'schedule' ? 'active-switch' : ''} onClick={() => setTab('schedule')}>Графики и поток платежей</button><button className={tab === 'scenarios' ? 'active-switch' : ''} onClick={() => setTab('scenarios')}>Сценарии</button></div></div>
-      {!result || !snapshot ? <div className="panel"><p>{error}</p></div> : tab === 'overview' ? <ResultSummary snapshot={snapshot} input={normalizedInput} /> : tab === 'schedule' ? <><DebtChart schedule={snapshot.chartsData} /><InterestPrincipalChart schedule={snapshot.chartsData} /><PaymentTable schedule={snapshot.tableData} prepayments={normalizedInput.prepayments} /></> : <ScenarioSection results={viewModel.smartScenarioResults} scenarios={smartScenarios} setScenarios={setSmartScenarios} />}
+      {!result || !snapshot ? <div className="panel"><p>{error}</p></div> : tab === 'overview' ? <ResultSummary snapshot={snapshot} input={normalizedInput} /> : tab === 'schedule' ? <><DebtChart schedule={snapshot.chartsData} /><InterestPrincipalChart schedule={snapshot.chartsData} /><PaymentTable schedule={snapshot.tableData} prepayments={normalizedInput.prepayments} /></> : <ScenarioSection results={viewModel.smartScenarioResults} scenarios={smartScenarios} setScenarios={setSmartScenarios} strategyStart={strategyStart} setStrategyStart={setStrategyStart} startPoint={viewModel.strategyStartPoint} />}
       {isDebug && <div className="panel debug"><h3>Диагностика</h3><ul><li>propertyPrice: {normalizedInput.propertyPrice}</li><li>downPayment: {normalizedInput.downPayment}</li><li>loanAmount: {normalizedInput.loanAmount}</li><li>annualRate: {normalizedInput.annualRate}</li><li>termYears: {normalizedInput.termYears}</li><li>firstPaymentDate: {normalizedInput.firstPaymentDate}</li><li>paymentType: {normalizedInput.paymentType}</li><li>prepayments count: {normalizedInput.prepayments.length}</li><li>schedule length: {result?.withPrepayments.schedule.length ?? 0}</li><li>closingDate: {result?.withPrepayments.summary.closingDate ?? '—'}</li><li>totalInterest: {result?.withPrepayments.summary.totalInterest ?? 0}</li><li>hasPrepaymentEffect: {String(viewModel.hasPrepaymentEffect)}</li><li>firstScheduleDate: {result?.withPrepayments.schedule[0]?.date ?? '—'}</li><li>diagnostics: {diagnostics.map((d) => `${d.id}:${d.passed ? 'ok' : 'fail'}`).join(', ')}</li></ul></div>}
     </section></main>
 
