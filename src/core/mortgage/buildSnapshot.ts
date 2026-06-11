@@ -19,27 +19,48 @@ export function buildSnapshot(input: MortgageInput, asOf: Date = new Date()): Mo
   const fullPlan: MortgageFullPlan = {
     totalPayment: active.summary.totalPayment,
     totalInterest: active.summary.totalInterest,
+    totalInterestFullPlan: active.summary.totalInterest,
     totalInsuranceCost: active.summary.totalInsuranceCost,
     totalRealCost: active.summary.totalRealCost,
     realCostMultiplier: active.summary.realCostMultiplier,
     closingDate: active.summary.closingDate,
     monthsTotal: active.schedule.length,
     interestSavings: comparison.interestSavings,
+    interestSavedByPrepayments: comparison.interestSavedByPrepayments,
     monthsSaved: comparison.monthsSaved,
   };
+
+  const paidTotal = sumRows(paidRows, (row) => row.payment + row.prepayment + row.insuranceCost);
+  const paidInterest = sumRows(paidRows, (row) => row.interest);
+  const paidPrincipal = sumRows(paidRows, (row) => row.principal);
+  const paidPrepayments = sumRows(paidRows, (row) => row.prepayment);
+  const paidInsurance = sumRows(paidRows, (row) => row.insuranceCost);
+  const remainingPrincipal = Number(Math.max(0, currentDebt).toFixed(2));
+  const remainingInterest = sumRows(futureRows, (row) => row.interest);
+  const remainingInsurance = sumRows(futureRows, (row) => row.insuranceCost);
+  const remainingTotalCashflow = Number((remainingPrincipal + remainingInterest + remainingInsurance).toFixed(2));
 
   const currentSnapshot: MortgageCurrentSnapshot = {
     asOfDate,
     elapsedMonths: paidRows.length,
-    paidTotal: sumRows(paidRows, (row) => row.payment + row.prepayment + row.insuranceCost),
-    paidInterest: sumRows(paidRows, (row) => row.interest),
-    paidPrincipal: sumRows(paidRows, (row) => row.principal),
-    paidPrepayments: sumRows(paidRows, (row) => row.prepayment),
-    paidInsurance: sumRows(paidRows, (row) => row.insuranceCost),
-    currentDebt: Number(Math.max(0, currentDebt).toFixed(2)),
-    remainingToPay: sumRows(futureRows, (row) => row.payment + row.prepayment + row.insuranceCost),
-    remainingInterest: sumRows(futureRows, (row) => row.interest),
-    remainingInsurance: sumRows(futureRows, (row) => row.insuranceCost),
+    paidTotal,
+    paidInterest,
+    paidInterestToDate: paidInterest,
+    paidPrincipal,
+    paidPrincipalToDate: paidPrincipal,
+    paidPrepayments,
+    paidPrepaymentsToDate: paidPrepayments,
+    paidInsurance,
+    paidInsuranceToDate: paidInsurance,
+    totalPaidToDate: paidTotal,
+    currentDebt: remainingPrincipal,
+    remainingPrincipal,
+    remainingToPay: remainingTotalCashflow,
+    remainingTotalCashflow,
+    remainingInterest,
+    futureInterestRemaining: remainingInterest,
+    remainingInsurance,
+    futureInsuranceRemaining: remainingInsurance,
     progressPercent: active.schedule.length > 0 ? Number(((paidRows.length / active.schedule.length) * 100).toFixed(1)) : 0,
   };
 
@@ -50,6 +71,7 @@ export function buildSnapshot(input: MortgageInput, asOf: Date = new Date()): Mo
       baseline: comparison.baseline.summary,
       active: active.summary,
       interestSavings: comparison.interestSavings,
+      interestSavedByPrepayments: comparison.interestSavedByPrepayments,
       monthsSaved: comparison.monthsSaved,
       hasPrepaymentEffect: comparison.interestSavings > 0 || comparison.monthsSaved > 0,
     },

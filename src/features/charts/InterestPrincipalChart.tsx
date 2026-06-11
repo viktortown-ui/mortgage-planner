@@ -190,7 +190,7 @@ export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] })
   return (
     <div className="chart">
       <div className="table-head">
-        <h3>Реальная стоимость по времени</h3>
+        <h3>Денежный поток по времени</h3>
         <div>
           <button type="button" className={view === 'month' ? 'active-switch' : ''} onClick={() => setView('month')}>
             По месяцам
