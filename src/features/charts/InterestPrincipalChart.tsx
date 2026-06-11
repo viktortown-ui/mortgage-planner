@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -40,6 +40,10 @@ type InterestPrincipalPoint = {
 const MONTH_POINT_WIDTH = 22;
 const YEAR_POINT_WIDTH = 58;
 const MIN_CHART_WIDTH = 760;
+
+function getDefaultChartView(): ChartView {
+  return typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'year' : 'month';
+}
 const MONTH_X_AXIS_HEIGHT = 104;
 const YEAR_X_AXIS_HEIGHT = 50;
 
@@ -169,7 +173,13 @@ function ChartTooltip({ active, label, payload }: TooltipContentProps<TooltipVal
 }
 
 export function InterestPrincipalChart({ schedule }: { schedule: PaymentRow[] }) {
-  const [view, setView] = useState<ChartView>('month');
+  const [view, setView] = useState<ChartView>(() => getDefaultChartView());
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const handleChange = (event: MediaQueryListEvent) => setView(event.matches ? 'year' : 'month');
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
 
   const data = useMemo(
     () => view === 'month' ? buildMonthlyData(schedule) : buildYearlyData(schedule),

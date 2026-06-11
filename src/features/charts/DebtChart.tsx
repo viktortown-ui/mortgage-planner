@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { TooltipContentProps, TooltipValueType } from 'recharts';
 import type { PaymentRow } from '../../core/mortgage/types';
@@ -21,6 +21,10 @@ type DebtPoint = {
 const MONTH_POINT_WIDTH = 20;
 const YEAR_POINT_WIDTH = 64;
 const MIN_CHART_WIDTH = 760;
+
+function getDefaultChartView(): ChartView {
+  return typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'year' : 'month';
+}
 
 function buildMonthlyData(schedule: PaymentRow[]): DebtPoint[] {
   return schedule.map((row) => ({
@@ -87,7 +91,13 @@ function DebtTooltip({ active, label, payload }: TooltipContentProps<TooltipValu
 }
 
 export function DebtChart({ schedule }: { schedule: PaymentRow[] }) {
-  const [view, setView] = useState<ChartView>('month');
+  const [view, setView] = useState<ChartView>(() => getDefaultChartView());
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const handleChange = (event: MediaQueryListEvent) => setView(event.matches ? 'year' : 'month');
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
   const data = useMemo(() => view === 'month' ? buildMonthlyData(schedule) : buildYearlyData(schedule), [schedule, view]);
   const monthTickStep = useMemo(() => getMonthTickStep(data.length), [data.length]);
   const visibleTickLabels = useMemo(() => new Map<string | number, string>(
