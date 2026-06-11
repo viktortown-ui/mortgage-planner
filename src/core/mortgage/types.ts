@@ -98,18 +98,21 @@ export interface ComparisonResult {
   baseline: CalculationResult;
   withPrepayments: CalculationResult;
   interestSavings: number;
+  interestSavedByPrepayments: number;
   monthsSaved: number;
 }
 
 export interface MortgageFullPlan {
   totalPayment: number;
   totalInterest: number;
+  totalInterestFullPlan: number;
   totalInsuranceCost: number;
   totalRealCost: number;
   realCostMultiplier: number;
   closingDate: string;
   monthsTotal: number;
   interestSavings: number;
+  interestSavedByPrepayments: number;
   monthsSaved: number;
 }
 
@@ -118,13 +121,22 @@ export interface MortgageCurrentSnapshot {
   elapsedMonths: number;
   paidTotal: number;
   paidInterest: number;
+  paidInterestToDate: number;
   paidPrincipal: number;
+  paidPrincipalToDate: number;
   paidPrepayments: number;
+  paidPrepaymentsToDate: number;
   paidInsurance: number;
+  paidInsuranceToDate: number;
+  totalPaidToDate: number;
   currentDebt: number;
+  remainingPrincipal: number;
   remainingToPay: number;
+  remainingTotalCashflow: number;
   remainingInterest: number;
+  futureInterestRemaining: number;
   remainingInsurance: number;
+  futureInsuranceRemaining: number;
   progressPercent: number;
 }
 
@@ -132,6 +144,7 @@ export interface MortgageScenarioSummary {
   baseline: MortgageSummary;
   active: MortgageSummary;
   interestSavings: number;
+  interestSavedByPrepayments: number;
   monthsSaved: number;
   hasPrepaymentEffect: boolean;
 }

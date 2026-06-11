@@ -20,7 +20,7 @@ export function MortgageInputForm({ input, error, onChange }: Props) {
   const addInsurance = () => onChange({ ...input, insuranceRules: [...input.insuranceRules, { id: newId('insurance'), title: 'Страховка', type: 'propertyInsurance', amount: 0, startDate: input.firstPaymentDate, frequency: 'annual', enabled: true }] });
 
   return <div className="sidebar-stack">
-    <section className="panel input-card featured-input"><div className="section-heading"><Icon name="home" /><div><h2>Параметры кредита</h2><p>Основные условия, из которых строится весь snapshot.</p></div></div>{error && <p className="error">{error}</p>}<div className="form-subtitle">Основные условия</div><div className="grid">
+    <section className="panel input-card featured-input"><div className="section-heading"><Icon name="home" /><div><h2>Параметры кредита</h2><p>Основные условия, из которых строится единый расчёт.</p></div></div>{error && <p className="error">{error}</p>}<div className="form-subtitle">Основные условия</div><div className="grid">
       <label><span>Стоимость недвижимости</span><MoneyInput value={input.propertyPrice} onValueChange={updateNumber('propertyPrice')} /><small>Цена объекта до первоначального взноса.</small></label>
       <label><span>Первоначальный взнос</span><MoneyInput value={input.downPayment} onValueChange={updateNumber('downPayment')} /><small>Не может превышать стоимость объекта.</small></label>
       <div className="readonly-info"><span>Сумма кредита</span><strong>{formatMoney(input.loanAmount)}</strong></div>

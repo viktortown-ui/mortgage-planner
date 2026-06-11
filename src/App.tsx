@@ -47,7 +47,7 @@ function ScenarioSection({ results, scenarios, setScenarios }: ScenarioSectionPr
 
   return (
     <div className="panel section scenario-section">
-      <div className="section-heading"><Icon name="chart" /><div><h3>Умное досрочное погашение</h3><p>Сравните A / B / C по тем же правилам, что и основной snapshot.</p></div></div>
+      <div className="section-heading"><Icon name="chart" /><div><h3>Умное досрочное погашение</h3><p>Сравните A / B / C по тем же правилам текущего расчёта.</p></div></div>
       {scenarios.every((scenario) => scenario.amount <= 0) ? <p className="muted-note">Введите параметры стратегии, чтобы сравнить варианты досрочного погашения.</p> : null}
       <div className="scenario-grid">
         {scenarios.map((scenario, idx) => {
@@ -69,10 +69,10 @@ function ScenarioSection({ results, scenarios, setScenarios }: ScenarioSectionPr
               </div>
               {scenarioResult ? (
                 <div className="scenario-metrics">
-                  <div><span>Экономия</span><strong>{formatMoney(scenarioResult.interestSavings)}</strong></div>
+                  <div><span>Экономия процентов</span><strong>{formatMoney(scenarioResult.interestSavings)}</strong></div>
                   <div><span>Сокращение срока</span><strong>{scenarioResult.monthsSaved} мес.</strong></div>
-                  <div><span>Переплата банку</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalInterest)}</strong></div>
-                  <div><span>Реальная стоимость</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalRealCost)}</strong></div>
+                  <div><span>Проценты за весь срок</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalInterest)}</strong></div>
+                  <div><span>Весь денежный поток</span><strong>{formatMoney(scenarioResult.withPrepayments.summary.totalRealCost)}</strong></div>
                   <div><span>Рекомендуемый доход</span><strong>{formatMoney(recommendedIncome)}</strong></div>
                   <div><span>Дата закрытия</span><strong>{scenarioResult.withPrepayments.summary.closingDate}</strong></div>
                 </div>

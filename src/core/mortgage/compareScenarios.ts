@@ -6,10 +6,12 @@ export function compareScenarios(input: MortgageInput): ComparisonResult | null 
   const baseline = buildSchedule(baselineInput, false);
   const custom = buildSchedule(input, true);
   if (!baseline || !custom) return null;
+  const interestSavings = Number((baseline.summary.totalInterest - custom.summary.totalInterest).toFixed(2));
   return {
     baseline,
     withPrepayments: custom,
-    interestSavings: Number((baseline.summary.totalInterest - custom.summary.totalInterest).toFixed(2)),
+    interestSavings,
+    interestSavedByPrepayments: interestSavings,
     monthsSaved: baseline.schedule.length - custom.schedule.length,
   };
 }

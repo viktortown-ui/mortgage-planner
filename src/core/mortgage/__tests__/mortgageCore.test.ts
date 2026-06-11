@@ -75,7 +75,48 @@ describe('schedule, insurance and snapshot consistency', () => {
     expect(snapshot?.fullPlan.totalRealCost).toBe(snapshot?.scenarioSummary.active.totalRealCost);
     expect(snapshot?.currentSnapshot.elapsedMonths).toBeGreaterThan(0);
     expect(snapshot?.currentSnapshot.paidInterest).toBeGreaterThan(0);
+    expect(snapshot?.currentSnapshot.remainingPrincipal).toBe(snapshot?.currentSnapshot.currentDebt);
+    expect(snapshot?.currentSnapshot.futureInterestRemaining).toBe(snapshot?.currentSnapshot.remainingInterest);
+    expect(snapshot?.currentSnapshot.futureInsuranceRemaining).toBe(snapshot?.currentSnapshot.remainingInsurance);
+    expect(snapshot?.currentSnapshot.remainingTotalCashflow).toBeCloseTo(
+      (snapshot?.currentSnapshot.remainingPrincipal ?? 0) +
+        (snapshot?.currentSnapshot.futureInterestRemaining ?? 0) +
+        (snapshot?.currentSnapshot.futureInsuranceRemaining ?? 0),
+      2,
+    );
+    expect(snapshot?.currentSnapshot.paidInterestToDate).toBe(snapshot?.currentSnapshot.paidInterest);
+    expect(snapshot?.currentSnapshot.paidPrincipalToDate).toBe(snapshot?.currentSnapshot.paidPrincipal);
+    expect(snapshot?.fullPlan.totalInterestFullPlan).toBe(snapshot?.fullPlan.totalInterest);
+    expect(snapshot?.fullPlan.interestSavedByPrepayments).toBe(snapshot?.comparison.interestSavedByPrepayments);
     expect(snapshot?.tableData).toBe(snapshot?.chartsData);
+  });
+
+
+
+  it('keeps the June 2026 sample case readable as principal, future interest and savings', () => {
+    const sample: MortgageInput = {
+      propertyPrice: 2_300_000,
+      downPayment: 580_000,
+      loanAmount: 1_720_000,
+      annualRate: 10.9,
+      termYears: 20,
+      firstPaymentDate: '2023-09-11',
+      paymentType: 'annuity',
+      incomeMonthly: 95_000,
+      prepayments: [
+        { date: '2024-10-11', amount: 210_000, mode: 'reduceTerm' },
+        { date: '2025-02-11', amount: 100_000, mode: 'reduceTerm' },
+        { date: '2025-06-11', amount: 305_000, mode: 'reduceTerm' },
+      ],
+      insuranceRules: [{ id: 'annual-insurance', title: 'Страховка', type: 'propertyInsurance', amount: 4_000, startDate: '2023-09-11', frequency: 'annual', enabled: true }],
+    };
+
+    const snapshot = buildSnapshot(sample, new Date('2026-06-11T00:00:00Z'));
+    expect(snapshot?.currentSnapshot.remainingPrincipal).toBeGreaterThan(900_000);
+    expect(snapshot?.currentSnapshot.remainingPrincipal).toBeLessThan(970_000);
+    expect(snapshot?.currentSnapshot.futureInterestRemaining).toBeGreaterThan(0);
+    expect(snapshot?.currentSnapshot.paidInterestToDate).toBeGreaterThan(0);
+    expect(snapshot?.fullPlan.interestSavedByPrepayments).toBeGreaterThan(0);
   });
 
   it('compares a mixed scenario with differentiated payments', () => {
