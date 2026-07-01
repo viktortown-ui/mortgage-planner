@@ -5,6 +5,7 @@ import { DateInput } from '../../shared/ui/DateInput';
 import { Icon } from '../../shared/ui/Icon';
 import { MoneyInput } from '../../shared/ui/MoneyInput';
 import { NumericField } from '../../shared/ui/NumericField';
+import { trackMetricaEvent } from '../../shared/analytics/metrica';
 
 interface Props { input: MortgageInput; error: string; onChange: (next: MortgageInput) => void; }
 
@@ -16,8 +17,14 @@ export function MortgageInputForm({ input, error, onChange }: Props) {
   const updateNumber = (field: keyof Pick<MortgageInput, 'propertyPrice' | 'downPayment' | 'annualRate' | 'termYears'>) => (value: number) => onChange({ ...input, [field]: value });
   const updatePrepayment = (index: number, patch: Partial<Prepayment>) => { const next = [...input.prepayments]; next[index] = { ...next[index], ...patch }; onChange({ ...input, prepayments: next }); };
   const updateInsurance = (index: number, patch: Partial<InsuranceRule>) => { const next = [...input.insuranceRules]; next[index] = { ...next[index], ...patch }; onChange({ ...input, insuranceRules: next }); };
-  const addPrepayment = (kind: 'once' | 'regular') => onChange({ ...input, prepayments: [...input.prepayments, { id: newId('prepay'), kind, date: input.firstPaymentDate, amount: 0, mode: 'reduceTerm', frequency: kind === 'regular' ? 'monthly' : undefined }] });
-  const addInsurance = () => onChange({ ...input, insuranceRules: [...input.insuranceRules, { id: newId('insurance'), title: 'Страховка', type: 'propertyInsurance', amount: 0, startDate: input.firstPaymentDate, frequency: 'annual', enabled: true }] });
+  const addPrepayment = (kind: 'once' | 'regular') => {
+    trackMetricaEvent(kind === 'regular' ? 'regular_prepayment_added' : 'prepayment_added');
+    onChange({ ...input, prepayments: [...input.prepayments, { id: newId('prepay'), kind, date: input.firstPaymentDate, amount: 0, mode: 'reduceTerm', frequency: kind === 'regular' ? 'monthly' : undefined }] });
+  };
+  const addInsurance = () => {
+    trackMetricaEvent('insurance_added');
+    onChange({ ...input, insuranceRules: [...input.insuranceRules, { id: newId('insurance'), title: 'Страховка', type: 'propertyInsurance', amount: 0, startDate: input.firstPaymentDate, frequency: 'annual', enabled: true }] });
+  };
 
   return <div className="sidebar-stack">
     <section className="panel input-card featured-input"><div className="section-heading"><Icon name="home" /><div><h2>Параметры кредита</h2><p>Основные условия, из которых строится единый расчёт.</p></div></div>{error && <p className="error">{error}</p>}<div className="form-subtitle">Основные условия</div><div className="grid">
