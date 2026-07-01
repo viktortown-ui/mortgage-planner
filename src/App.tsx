@@ -20,6 +20,7 @@ import { MoneyInput } from './shared/ui/MoneyInput';
 import { DateInput } from './shared/ui/DateInput';
 import { formatDate } from './shared/formatDate';
 import { Icon } from './shared/ui/Icon';
+import { trackMetricaEvent } from './shared/analytics/metrica';
 import './styles/global.css';
 
 const defaultInput: MortgageInput = { propertyPrice: 10000000, downPayment: 2000000, loanAmount: 8000000, annualRate: 12, termYears: 20, firstPaymentDate: '2026-06-01', paymentType: 'annuity', prepayments: [], insuranceRules: [], incomeMonthly: undefined };
@@ -136,6 +137,18 @@ function ScenarioSection({ results, scenarios, setScenarios, strategyStart, setS
   );
 }
 
+function SeoLandingSection() {
+  const faq = [
+    ['Что выгоднее: уменьшать срок или платёж?', 'Уменьшение срока обычно сильнее снижает переплату, а уменьшение платежа даёт больше свободы в ежемесячном бюджете. Выбор зависит от цели: экономия процентов или снижение нагрузки.'],
+    ['Как считаются досрочные платежи?', 'Планировщик добавляет разовые или регулярные досрочки в график и пересчитывает оставшийся долг по выбранному режиму: уменьшать срок или платёж.'],
+    ['Что означает остаток тела кредита?', 'Это только невыплаченная часть основного долга. Она не равна сумме всех будущих платежей, потому что будущие платежи включают проценты и возможные страховки.'],
+    ['Что входит в реальную стоимость ипотеки?', 'Реальная стоимость складывается из платежей по кредиту, досрочных платежей и дополнительных расходов, например страховых платежей, если они добавлены в план.'],
+    ['Как страховки влияют на ипотеку?', 'Страховки не уменьшают тело кредита, но увеличивают общий денежный поток. Поэтому их важно учитывать отдельно от процентов и основного долга.'],
+  ] as const;
+
+  return <section className="panel seo-landing" aria-labelledby="seo-title"><div><h2 id="seo-title">Ипотечный калькулятор с досрочным погашением</h2><p>Mortgage Planner помогает оценить платёж, срок закрытия и реальную стоимость ипотеки без лишней сложности.</p></div><div className="seo-grid"><article><h3>Ежемесячный платёж</h3><p>Введите стоимость жилья, взнос, ставку и срок — калькулятор покажет график платежей и структуру процентов и тела долга.</p></article><article><h3>Досрочные погашения</h3><p>Добавляйте разовые или регулярные досрочки и сравнивайте, как они уменьшают срок кредита или ежемесячный платёж.</p></article><article><h3>Остаток и будущие выплаты</h3><p>Остаток тела кредита показывает долг банку сейчас, а полная сумма будущих выплат дополнительно включает проценты и расходы.</p></article><article><h3>Страховки и нагрузка</h3><p>Страховые платежи учитываются отдельным потоком, а доход помогает увидеть, насколько ипотека влияет на месячный бюджет.</p></article></div><div className="seo-faq"><h3>FAQ</h3>{faq.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></section>;
+}
+
 function App() {
   const [input, setInput] = useState<MortgageInput>(() => loadFromStorage(STORAGE_KEY, defaultInput));
   const [autoScenario] = useState<AutoScenarioSettings>(defaultAuto);
@@ -147,8 +160,6 @@ function App() {
   const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
   const actionMenuRef = useRef<HTMLDetailsElement>(null);
 
-  useEffect(() => { applyTheme(theme); setStoredTheme(theme); }, [theme]);
-
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light');
   const safeSetInput = (next: MortgageInput) => {
     const normalized = normalizeMortgageInput(next, defaultInput);
@@ -158,6 +169,12 @@ function App() {
 
   const normalizedInput = useMemo(() => normalizeMortgageInput(input, defaultInput), [input]);
   const viewModel = useMemo(() => buildMortgageViewModel(normalizedInput, autoScenario, smartScenarios, strategyStart), [normalizedInput, autoScenario, smartScenarios, strategyStart]);
+  useEffect(() => { trackMetricaEvent('calculator_opened'); }, []);
+  useEffect(() => { applyTheme(theme); setStoredTheme(theme); trackMetricaEvent('theme_changed'); }, [theme]);
+  useEffect(() => { const timeout = window.setTimeout(() => trackMetricaEvent('loan_parameters_changed'), 900); return () => window.clearTimeout(timeout); }, [normalizedInput.propertyPrice, normalizedInput.downPayment, normalizedInput.annualRate, normalizedInput.termYears, normalizedInput.firstPaymentDate, normalizedInput.paymentType]);
+  useEffect(() => { if (tab === 'schedule') trackMetricaEvent('payment_schedule_opened'); if (tab === 'scenarios') trackMetricaEvent('scenario_opened'); }, [tab]);
+  useEffect(() => { trackMetricaEvent('strategy_compared'); }, [smartScenarios, strategyStart]);
+  useEffect(() => { trackMetricaEvent('mobile_view_opened'); }, [mobileTab]);
   const result = viewModel.comparison;
   const snapshot = viewModel.snapshot;
 
@@ -191,13 +208,15 @@ function App() {
       {snapshot && <section className="panel input-card compact-calendar"><div className="section-heading"><Icon name="calendar" /><div><h3>Календарь</h3><p>Платежи, досрочки и страховки в одном месячном виде.</p></div></div><PaymentCalendar schedule={snapshot.calendarEvents} prepayments={normalizedInput.prepayments} insuranceEvents={snapshot.scenarioSummary.active.insuranceEvents} /></section>}
     </aside><section className="results"><div className="panel tabs-panel"><div className="tabs"><button className={tab === 'overview' ? 'active-switch' : ''} onClick={() => setTab('overview')}>Обзор</button><button className={tab === 'schedule' ? 'active-switch' : ''} onClick={() => setTab('schedule')}>Графики и поток платежей</button><button className={tab === 'scenarios' ? 'active-switch' : ''} onClick={() => setTab('scenarios')}>Сценарии</button></div></div>
       {!result || !snapshot ? <div className="panel"><p>{error}</p></div> : tab === 'overview' ? <ResultSummary snapshot={snapshot} input={normalizedInput} /> : tab === 'schedule' ? <><DebtChart schedule={snapshot.chartsData} /><InterestPrincipalChart schedule={snapshot.chartsData} /><PaymentTable schedule={snapshot.tableData} prepayments={normalizedInput.prepayments} /></> : <ScenarioSection results={viewModel.smartScenarioResults} scenarios={smartScenarios} setScenarios={setSmartScenarios} strategyStart={strategyStart} setStrategyStart={setStrategyStart} startPoint={viewModel.strategyStartPoint} />}
+      <SeoLandingSection />
+      <footer className="privacy-notice">Мы используем обезличенную статистику, чтобы понимать, какие функции полезны. В расчёты и суммы пользователя статистика не передаётся.</footer>
       {isDebug && <div className="panel debug"><h3>Диагностика</h3><ul><li>propertyPrice: {normalizedInput.propertyPrice}</li><li>downPayment: {normalizedInput.downPayment}</li><li>loanAmount: {normalizedInput.loanAmount}</li><li>annualRate: {normalizedInput.annualRate}</li><li>termYears: {normalizedInput.termYears}</li><li>firstPaymentDate: {normalizedInput.firstPaymentDate}</li><li>paymentType: {normalizedInput.paymentType}</li><li>prepayments count: {normalizedInput.prepayments.length}</li><li>schedule length: {result?.withPrepayments.schedule.length ?? 0}</li><li>closingDate: {result?.withPrepayments.summary.closingDate ?? '—'}</li><li>totalInterest: {result?.withPrepayments.summary.totalInterest ?? 0}</li><li>hasPrepaymentEffect: {String(viewModel.hasPrepaymentEffect)}</li><li>firstScheduleDate: {result?.withPrepayments.schedule[0]?.date ?? '—'}</li><li>diagnostics: {diagnostics.map((d) => `${d.id}:${d.passed ? 'ok' : 'fail'}`).join(', ')}</li></ul></div>}
     </section></main>
 
     <section className="mobile-shell" aria-label="Мобильная версия">
       <header className="mobile-header"><div><strong>Ипотечный планировщик</strong><span>Кредит, досрочки, страховки</span></div><div className="mobile-header__actions"><button type="button" aria-label="Сменить тему" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button><button type="button" onClick={() => setIsActionSheetOpen(true)}>Действия</button></div></header>
       {snapshot ? <div className="mobile-sticky-summary" aria-label="Главные итоги">{mobileSummary.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div> : null}
-      <main className="mobile-content">{mobileContent}{isDebug ? <div className="panel debug"><h3>Диагностика</h3><p>schedule length: {result?.withPrepayments.schedule.length ?? 0}</p></div> : null}</main>
+      <main className="mobile-content">{mobileContent}<SeoLandingSection /><footer className="privacy-notice">Мы используем обезличенную статистику, чтобы понимать, какие функции полезны. В расчёты и суммы пользователя статистика не передаётся.</footer>{isDebug ? <div className="panel debug"><h3>Диагностика</h3><p>schedule length: {result?.withPrepayments.schedule.length ?? 0}</p></div> : null}</main>
       <nav className="mobile-bottom-nav" aria-label="Основная мобильная навигация">
         <button type="button" className={mobileTab === 'overview' ? 'active-switch' : ''} onClick={() => setMobileTab('overview')}><span aria-hidden="true">⌂</span>Обзор</button>
         <button type="button" className={mobileTab === 'input' ? 'active-switch' : ''} onClick={() => setMobileTab('input')}><span aria-hidden="true">✎</span>Ввод</button>
