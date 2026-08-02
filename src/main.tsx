@@ -4,9 +4,11 @@ import App from './App';
 import { ErrorBoundary } from './shared/ErrorBoundary';
 import { applyTheme, getStoredTheme } from './shared/theme';
 import { initMetrica } from './shared/analytics/metrica';
+import { registerSW } from 'virtual:pwa-register';
 
 applyTheme(getStoredTheme());
 initMetrica();
+registerSW({ immediate: true });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

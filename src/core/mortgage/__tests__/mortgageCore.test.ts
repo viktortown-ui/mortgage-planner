@@ -91,6 +91,18 @@ describe('schedule, insurance and snapshot consistency', () => {
     expect(snapshot?.tableData).toBe(snapshot?.chartsData);
   });
 
+  it('keeps the full principal before the first scheduled payment', () => {
+    const futureInput = { ...baseInput, firstPaymentDate: '2030-01-01' };
+    const snapshot = buildSnapshot(futureInput, new Date('2029-12-01T00:00:00Z'));
+
+    expect(snapshot?.currentSnapshot.elapsedMonths).toBe(0);
+    expect(snapshot?.currentSnapshot.currentDebt).toBe(futureInput.loanAmount);
+    expect(snapshot?.currentSnapshot.remainingTotalCashflow).toBeCloseTo(
+      futureInput.loanAmount + (snapshot?.fullPlan.totalInterest ?? 0),
+      2,
+    );
+  });
+
 
 
   it('keeps the June 2026 sample case readable as principal, future interest and savings', () => {

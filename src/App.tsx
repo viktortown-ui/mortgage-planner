@@ -21,6 +21,9 @@ import { DateInput } from './shared/ui/DateInput';
 import { formatDate } from './shared/formatDate';
 import { Icon } from './shared/ui/Icon';
 import { trackMetricaEvent } from './shared/analytics/metrica';
+import { getCalculationError } from './shared/calculationError';
+import { resolveMobileTab, type MobileTab } from './features/mobile/mobileNavigation';
+import { useOnlineStatus, usePwaInstall } from './shared/usePwaInstall';
 import './styles/global.css';
 
 const defaultInput: MortgageInput = { propertyPrice: 10000000, downPayment: 2000000, loanAmount: 8000000, annualRate: 12, termYears: 20, firstPaymentDate: '2026-06-01', paymentType: 'annuity', prepayments: [], insuranceRules: [], incomeMonthly: undefined };
@@ -42,7 +45,6 @@ type ScenarioSectionProps = {
 };
 
 type DesktopTab = 'overview' | 'schedule' | 'scenarios';
-type MobileTab = 'overview' | 'input' | 'charts' | 'scenarios' | 'table';
 
 const frequencyLabels: Record<SmartScenarioInput['frequency'], string> = {
   monthly: 'каждый месяц',
@@ -149,6 +151,10 @@ function SeoLandingSection() {
   return <section className="panel seo-landing" aria-labelledby="seo-title"><div><h2 id="seo-title">Ипотечный калькулятор с досрочным погашением</h2><p>Mortgage Planner помогает оценить платёж, срок закрытия и реальную стоимость ипотеки без лишней сложности.</p></div><div className="seo-grid"><article><h3>Ежемесячный платёж</h3><p>Введите стоимость жилья, взнос, ставку и срок — калькулятор покажет график платежей и структуру процентов и тела долга.</p></article><article><h3>Досрочные погашения</h3><p>Добавляйте разовые или регулярные досрочки и сравнивайте, как они уменьшают срок кредита или ежемесячный платёж.</p></article><article><h3>Остаток и будущие выплаты</h3><p>Остаток тела кредита показывает долг банку сейчас, а полная сумма будущих выплат дополнительно включает проценты и расходы.</p></article><article><h3>Страховки и нагрузка</h3><p>Страховые платежи учитываются отдельным потоком, а доход помогает увидеть, насколько ипотека влияет на месячный бюджет.</p></article></div><div className="seo-faq"><h3>FAQ</h3>{faq.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></section>;
 }
 
+function InstallCallout({ canInstall, isIos, onInstall, onDismiss }: { canInstall: boolean; isIos: boolean; onInstall: () => void; onDismiss: () => void }) {
+  return <section className="panel install-callout" aria-label="Установка приложения"><button type="button" className="install-callout__close" aria-label="Скрыть" onClick={onDismiss}>×</button><div><strong>Установите на телефон</strong><p>Будет открываться как обычное приложение и работать без интернета после первого запуска.</p></div><button type="button" className="install-callout__action" onClick={onInstall}>{canInstall ? 'Установить' : isIos ? 'Как установить' : 'Открыть инструкцию'}</button></section>;
+}
+
 function App() {
   const [input, setInput] = useState<MortgageInput>(() => loadFromStorage(STORAGE_KEY, defaultInput));
   const [autoScenario] = useState<AutoScenarioSettings>(defaultAuto);
@@ -157,13 +163,18 @@ function App() {
   const [tab, setTab] = useState<DesktopTab>('overview');
   const [mobileTab, setMobileTab] = useState<MobileTab>('overview');
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
+  const [installMessage, setInstallMessage] = useState('');
+  const [installCardDismissed, setInstallCardDismissed] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
   const actionMenuRef = useRef<HTMLDetailsElement>(null);
+  const { canInstall, isIos, isStandalone, requestInstall } = usePwaInstall();
+  const isOnline = useOnlineStatus();
 
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light');
   const safeSetInput = (next: MortgageInput) => {
     const normalized = normalizeMortgageInput(next, defaultInput);
     setInput(normalized);
+    setMobileTab('input');
     saveToStorage(STORAGE_KEY, normalized);
   };
 
@@ -178,31 +189,30 @@ function App() {
   const result = viewModel.comparison;
   const snapshot = viewModel.snapshot;
 
-  const error = useMemo(() => {
-    if (normalizedInput.downPayment > normalizedInput.propertyPrice) return 'Первоначальный взнос не может быть больше стоимости недвижимости.';
-    if (!result) return 'Расчёт временно невозможен. Проверьте параметры кредита.';
-    return '';
-  }, [normalizedInput, result]);
+  const error = useMemo(() => getCalculationError(normalizedInput, Boolean(result)), [normalizedInput, result]);
+  const effectiveMobileTab = resolveMobileTab(mobileTab, Boolean(result && snapshot));
+  const handleInstall = async () => setInstallMessage(await requestInstall());
 
   const isDebug = useMemo(() => new URLSearchParams(window.location.search).get('debug') === '1' || import.meta.env.DEV, []);
   const diagnostics = useMemo(() => runPrepaymentDiagnostics({ ...defaultInput, firstPaymentDate: '2023-08-10' }), []);
   const mobileSummary = snapshot ? [
+    { label: 'Платёж', value: formatMoney(snapshot.currentSnapshot.currentScheduledPayment) },
     { label: 'Остаток тела', value: formatMoney(snapshot.currentSnapshot.currentDebt) },
     { label: 'Ещё выплатить', value: formatMoney(snapshot.currentSnapshot.remainingTotalCashflow) },
     { label: 'Экономия', value: formatMoney(snapshot.scenarioSummary.interestSavings) },
   ] : [];
-  const mobileContent = !result || !snapshot ? <div className="panel"><p>{error}</p></div> : mobileTab === 'overview'
+  const mobileContent = effectiveMobileTab === 'input'
+    ? <MobileInputAccordion input={normalizedInput} onChange={safeSetInput} error={error} snapshot={snapshot} />
+    : !result || !snapshot ? null : effectiveMobileTab === 'overview'
     ? <ResultSummary snapshot={snapshot} input={normalizedInput} />
-    : mobileTab === 'input'
-      ? <MobileInputAccordion input={normalizedInput} onChange={safeSetInput} error={error} snapshot={snapshot} />
-      : mobileTab === 'charts'
+      : effectiveMobileTab === 'charts'
         ? <><DebtChart schedule={snapshot.chartsData} /><InterestPrincipalChart schedule={snapshot.chartsData} /></>
-        : mobileTab === 'scenarios'
+        : effectiveMobileTab === 'scenarios'
           ? <ScenarioSection results={viewModel.smartScenarioResults} scenarios={smartScenarios} setScenarios={setSmartScenarios} strategyStart={strategyStart} setStrategyStart={setStrategyStart} startPoint={viewModel.strategyStartPoint} />
           : <PaymentTable schedule={snapshot.tableData} prepayments={normalizedInput.prepayments} />;
 
   return <div className="app">
-    <header className="app-header desktop-header"><div className="brand"><Icon name="home" /><div><strong>Ипотечный планировщик</strong><span>единый расчёт · понятные сценарии</span></div></div><div className="header-actions"><button type="button" onClick={toggleTheme}>{theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}</button><details className="action-menu" ref={actionMenuRef}><summary>Действия</summary><div><button type="button" onClick={() => { actionMenuRef.current?.removeAttribute('open'); void refreshApplication(); }}>Обновить приложение</button><button type="button" className="danger-action" onClick={() => { actionMenuRef.current?.removeAttribute('open'); void resetApplicationData(STORAGE_KEY); }}>Сбросить данные</button></div></details></div></header>
+    <header className="app-header desktop-header"><div className="brand"><Icon name="home" /><div><strong>Ипотечный планировщик</strong><span>единый расчёт · понятные сценарии</span></div></div><div className="header-actions"><button type="button" onClick={toggleTheme}>{theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}</button><details className="action-menu" ref={actionMenuRef}><summary>Действия</summary><div>{!isStandalone ? <button type="button" onClick={() => { actionMenuRef.current?.removeAttribute('open'); void handleInstall(); }}>{canInstall ? 'Установить приложение' : 'Как установить'}</button> : null}<button type="button" onClick={() => { actionMenuRef.current?.removeAttribute('open'); void refreshApplication(); }}>Обновить приложение</button><button type="button" className="danger-action" onClick={() => { actionMenuRef.current?.removeAttribute('open'); void resetApplicationData(STORAGE_KEY); }}>Сбросить данные</button></div></details></div></header>
 
     <main className="layout desktop-shell"><aside className="left-col"><MortgageInputForm input={normalizedInput} onChange={safeSetInput} error={error} />
       {snapshot && <section className="panel input-card compact-calendar"><div className="section-heading"><Icon name="calendar" /><div><h3>Календарь</h3><p>Платежи, досрочки и страховки в одном месячном виде.</p></div></div><PaymentCalendar schedule={snapshot.calendarEvents} prepayments={normalizedInput.prepayments} insuranceEvents={snapshot.scenarioSummary.active.insuranceEvents} /></section>}
@@ -215,17 +225,18 @@ function App() {
 
     <section className="mobile-shell" aria-label="Мобильная версия">
       <header className="mobile-header"><div><strong>Ипотечный планировщик</strong><span>Кредит, досрочки, страховки</span></div><div className="mobile-header__actions"><button type="button" aria-label="Сменить тему" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button><button type="button" onClick={() => setIsActionSheetOpen(true)}>Действия</button></div></header>
-      {snapshot ? <div className="mobile-sticky-summary" aria-label="Главные итоги">{mobileSummary.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div> : null}
-      <main className="mobile-content">{mobileContent}<SeoLandingSection /><footer className="privacy-notice">Мы используем обезличенную статистику, чтобы понимать, какие функции полезны. В расчёты и суммы пользователя статистика не передаётся.</footer>{isDebug ? <div className="panel debug"><h3>Диагностика</h3><p>schedule length: {result?.withPrepayments.schedule.length ?? 0}</p></div> : null}</main>
+      {snapshot ? <div className="mobile-sticky-summary" aria-label="Главные итоги" aria-live="polite">{mobileSummary.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div> : null}
+      <main className="mobile-content">{!isOnline ? <div className="offline-banner" role="status">Автономный режим: расчёты и сохранённые данные доступны без интернета.</div> : null}{!isStandalone && !installCardDismissed ? <InstallCallout canInstall={canInstall} isIos={isIos} onInstall={() => void handleInstall()} onDismiss={() => setInstallCardDismissed(true)} /> : null}{mobileContent}<SeoLandingSection /><footer className="privacy-notice">Мы используем обезличенную статистику, чтобы понимать, какие функции полезны. В расчёты и суммы пользователя статистика не передаётся.</footer>{isDebug ? <div className="panel debug"><h3>Диагностика</h3><p>schedule length: {result?.withPrepayments.schedule.length ?? 0}</p></div> : null}</main>
       <nav className="mobile-bottom-nav" aria-label="Основная мобильная навигация">
-        <button type="button" className={mobileTab === 'overview' ? 'active-switch' : ''} onClick={() => setMobileTab('overview')}><span aria-hidden="true">⌂</span>Обзор</button>
-        <button type="button" className={mobileTab === 'input' ? 'active-switch' : ''} onClick={() => setMobileTab('input')}><span aria-hidden="true">✎</span>Ввод</button>
-        <button type="button" className={mobileTab === 'charts' ? 'active-switch' : ''} onClick={() => setMobileTab('charts')}><span aria-hidden="true">▦</span>Графики</button>
-        <button type="button" className={mobileTab === 'scenarios' ? 'active-switch' : ''} onClick={() => setMobileTab('scenarios')}><span aria-hidden="true">◇</span>Сценарии</button>
-        <button type="button" className={mobileTab === 'table' ? 'active-switch' : ''} onClick={() => setMobileTab('table')}><span aria-hidden="true">☷</span>Таблица</button>
+        <button type="button" className={effectiveMobileTab === 'overview' ? 'active-switch' : ''} onClick={() => setMobileTab('overview')}><span aria-hidden="true">⌂</span>Обзор</button>
+        <button type="button" className={effectiveMobileTab === 'input' ? 'active-switch' : ''} onClick={() => setMobileTab('input')}><span aria-hidden="true">✎</span>Ввод</button>
+        <button type="button" className={effectiveMobileTab === 'charts' ? 'active-switch' : ''} onClick={() => setMobileTab('charts')}><span aria-hidden="true">▦</span>Графики</button>
+        <button type="button" className={effectiveMobileTab === 'scenarios' ? 'active-switch' : ''} onClick={() => setMobileTab('scenarios')}><span aria-hidden="true">◇</span>Сценарии</button>
+        <button type="button" className={effectiveMobileTab === 'table' ? 'active-switch' : ''} onClick={() => setMobileTab('table')}><span aria-hidden="true">☷</span>Таблица</button>
       </nav>
-      {isActionSheetOpen ? <div className="mobile-sheet-backdrop" role="presentation" onClick={() => setIsActionSheetOpen(false)}><section className="mobile-action-sheet" role="dialog" aria-modal="true" aria-label="Действия" onClick={(event) => event.stopPropagation()}><div className="mobile-sheet-handle" /><h2>Действия</h2><button type="button" onClick={() => { setIsActionSheetOpen(false); void refreshApplication(); }}>Обновить приложение</button><button type="button" onClick={toggleTheme}>Тема: {theme === 'dark' ? 'светлая' : 'тёмная'}</button><button type="button" className="danger-action" onClick={() => { setIsActionSheetOpen(false); void resetApplicationData(STORAGE_KEY); }}>Сбросить данные</button><button type="button" onClick={() => setIsActionSheetOpen(false)}>Закрыть</button></section></div> : null}
+      {isActionSheetOpen ? <div className="mobile-sheet-backdrop" role="presentation" onClick={() => setIsActionSheetOpen(false)}><section className="mobile-action-sheet" role="dialog" aria-modal="true" aria-label="Действия" onClick={(event) => event.stopPropagation()}><div className="mobile-sheet-handle" /><h2>Действия</h2>{!isStandalone ? <button type="button" onClick={() => { setIsActionSheetOpen(false); void handleInstall(); }}>{canInstall ? 'Установить на телефон' : 'Как установить'}</button> : null}<button type="button" onClick={() => { setIsActionSheetOpen(false); void refreshApplication(); }}>Обновить приложение</button><button type="button" onClick={toggleTheme}>Тема: {theme === 'dark' ? 'светлая' : 'тёмная'}</button><button type="button" className="danger-action" onClick={() => { setIsActionSheetOpen(false); void resetApplicationData(STORAGE_KEY); }}>Сбросить данные</button><button type="button" onClick={() => setIsActionSheetOpen(false)}>Закрыть</button></section></div> : null}
     </section>
+    {installMessage ? <div className="install-toast" role="status"><p>{installMessage}</p><button type="button" onClick={() => setInstallMessage('')}>Понятно</button></div> : null}
   </div>;
 }
 

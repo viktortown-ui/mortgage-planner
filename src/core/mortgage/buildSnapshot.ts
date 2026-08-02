@@ -1,5 +1,5 @@
 import { compareScenarios } from './compareScenarios';
-import type { MortgageCurrentSnapshot, MortgageFullPlan, MortgageInput, MortgageSnapshot, PaymentRow, ReducePaymentImpact } from './types';
+import type { ComparisonResult, MortgageCurrentSnapshot, MortgageFullPlan, MortgageInput, MortgageSnapshot, PaymentRow, ReducePaymentImpact } from './types';
 
 function isoToday(date = new Date()): string { return date.toISOString().slice(0, 10); }
 function sumRows(rows: PaymentRow[], selector: (row: PaymentRow) => number): number {
@@ -41,8 +41,8 @@ function findReducePaymentImpact(input: MortgageInput, rows: PaymentRow[], asOfD
   };
 }
 
-export function buildSnapshot(input: MortgageInput, asOf: Date = new Date()): MortgageSnapshot | null {
-  const comparison = compareScenarios(input);
+export function buildSnapshot(input: MortgageInput, asOf: Date = new Date(), comparisonOverride?: ComparisonResult): MortgageSnapshot | null {
+  const comparison = comparisonOverride ?? compareScenarios(input);
   if (!comparison) return null;
 
   const active = comparison.withPrepayments;
@@ -50,7 +50,7 @@ export function buildSnapshot(input: MortgageInput, asOf: Date = new Date()): Mo
   const paidRows = active.schedule.filter((row) => row.date <= asOfDate);
   const futureRows = active.schedule.filter((row) => row.date > asOfDate);
   const lastPaidRow = paidRows.at(-1);
-  const currentDebt = lastPaidRow?.remainingDebt ?? active.schedule[0]?.remainingDebt ?? input.loanAmount;
+  const currentDebt = lastPaidRow?.remainingDebt ?? input.loanAmount;
   const fullPlan: MortgageFullPlan = {
     totalPayment: active.summary.totalPayment,
     totalInterest: active.summary.totalInterest,

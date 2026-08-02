@@ -12,13 +12,4 @@ export async function resetAppData(): Promise<void> {
   } catch {
     // ignore storage access errors
   }
-
-  if (typeof caches !== 'undefined') {
-    try {
-      const cacheKeys = await caches.keys();
-      await Promise.all(cacheKeys.map((key) => caches.delete(key)));
-    } catch {
-      // ignore cache API errors
-    }
-  }
 }

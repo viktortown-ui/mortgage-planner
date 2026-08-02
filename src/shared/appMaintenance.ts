@@ -1,14 +1,4 @@
-const APP_CACHE_HINT = 'mortgage-planner';
-
-async function clearPlannerCaches(): Promise<void> {
-  if (typeof caches === 'undefined') return;
-  const keys = await caches.keys();
-  await Promise.all(
-    keys
-      .filter((key) => key.toLowerCase().includes(APP_CACHE_HINT))
-      .map((key) => caches.delete(key)),
-  );
-}
+const APP_SCOPE_HINT = '/mortgage-planner/';
 
 function buildCacheBustedUrl(): string {
   const url = new URL(window.location.href);
@@ -18,23 +8,22 @@ function buildCacheBustedUrl(): string {
 }
 
 export async function refreshApplication(): Promise<void> {
-  await clearPlannerCaches();
-
   if ('serviceWorker' in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(
-      registrations
-        .filter((registration) => registration.scope.toLowerCase().includes(APP_CACHE_HINT))
-        .map((registration) => registration.unregister()),
-    );
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.filter((registration) => registration.scope.includes(APP_SCOPE_HINT)).map(async (registration) => {
+        try { await registration.update(); } catch { /* stay on the cached version while offline */ }
+      }));
+    } catch {
+      // reload the cached application if service worker access is unavailable
+    }
   }
 
   window.location.href = buildCacheBustedUrl();
 }
 
 export async function resetApplicationData(storageKey: string): Promise<void> {
-  localStorage.removeItem(storageKey);
-  sessionStorage.clear();
-  await clearPlannerCaches();
+  try { localStorage.removeItem(storageKey); } catch { /* ignore storage access errors */ }
+  try { sessionStorage.clear(); } catch { /* ignore storage access errors */ }
   window.location.reload();
 }

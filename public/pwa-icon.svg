@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ипотечный планировщик">
+  <defs>
+    <linearGradient id="background" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb" />
+      <stop offset="1" stop-color="#7c3aed" />
+    </linearGradient>
+    <linearGradient id="roof" x1="156" y1="156" x2="370" y2="378" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" />
+      <stop offset="1" stop-color="#dbeafe" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#07111f" />
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#background)" />
+  <path d="M112 243 256 122l144 121v150a24 24 0 0 1-24 24H136a24 24 0 0 1-24-24V243Z" fill="url(#roof)" />
+  <path d="M88 253 256 112l168 141" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M221 405v-92h70v92" fill="#2563eb" />
+  <path d="M178 267h51m-25-25v51m80-51h48c22 0 39 14 39 33 0 20-17 34-39 34h-48m0-67v112m0-45h72" fill="none" stroke="#2563eb" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

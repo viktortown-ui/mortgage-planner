@@ -1,7 +1,7 @@
 import { buildSchedule } from './buildSchedule';
 import { buildSnapshot } from './buildSnapshot';
 import { expandInsuranceSchedule } from './insuranceSchedule';
-import type { CalculationResult, ComparisonResult, InsuranceRule, MortgageInput, PaymentRow, PrepaymentMode, StrategyPaymentMetrics } from './types';
+import type { CalculationResult, ComparisonResult, InsuranceRule, MortgageInput, MortgageSnapshot, PaymentRow, PrepaymentMode, StrategyPaymentMetrics } from './types';
 
 export type StrategyStartMode = 'loanStart' | 'currentSnapshot' | 'customDate';
 export type ScenarioFrequency = 'monthly' | 'quarterly' | 'semiAnnual' | 'annual';
@@ -185,8 +185,9 @@ export function resolveStrategyStartPoint(
   input: MortgageInput,
   settings: StrategyStartSettings,
   asOf: Date = new Date(),
+  snapshotOverride?: MortgageSnapshot | null,
 ): StrategyStartPoint | null {
-  const snapshot = buildSnapshot(input, asOf);
+  const snapshot = snapshotOverride === undefined ? buildSnapshot(input, asOf) : snapshotOverride;
   if (!snapshot) return null;
 
   const active = snapshot.comparison.withPrepayments;

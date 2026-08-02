@@ -24,9 +24,9 @@ export function buildMortgageViewModel(
   asOf: Date = new Date(),
 ): MortgageViewModel {
   const comparison = compareScenarios(normalizedInput);
-  const snapshot = buildSnapshot(normalizedInput, asOf);
+  const snapshot = comparison ? buildSnapshot(normalizedInput, asOf, comparison) : null;
   const autoScenarioResult = buildAutoScenario(normalizedInput, autoScenario);
-  const strategyStartPoint = resolveStrategyStartPoint(normalizedInput, strategyStart, asOf);
+  const strategyStartPoint = resolveStrategyStartPoint(normalizedInput, strategyStart, asOf, snapshot);
   const smartScenarioResults = strategyStartPoint
     ? smartScenarios.map((scenario) => compareSmartScenario(normalizedInput, scenario, strategyStartPoint))
     : smartScenarios.map((scenario) => ({ id: scenario.id, result: null, warnings: ['Расчёт точки старта стратегии временно невозможен.'] }));
